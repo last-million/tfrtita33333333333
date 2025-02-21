@@ -22,13 +22,17 @@ log() {
 }
 
 # -----------------------------------------------------------
-# Ⅰ. SYSTEM PREPARATION
+# I. SYSTEM PREPARATION
 # -----------------------------------------------------------
 log "Updating system packages..."
 sudo apt update && sudo apt upgrade -y
 
 log "Installing required packages (nginx, certbot, ufw, git, python3, nodejs, etc.)..."
-sudo apt install -y nginx certbot python3-certbot-nginx ufw git python3 python3-pip python3-venv libyaml-dev nodejs
+# Also install dos2unix to fix any potential CRLF issues.
+sudo apt install -y nginx certbot python3-certbot-nginx ufw git python3 python3-pip python3-venv libyaml-dev nodejs dos2unix
+
+# Convert deploy.sh to Unix line endings (if needed)
+dos2unix deploy.sh
 
 log "Configuring UFW firewall..."
 sudo ufw allow OpenSSH
@@ -56,7 +60,7 @@ sudo tee /etc/iptables/rules.v4 > /dev/null <<'EOF'
 -A INPUT -p tcp -m state --state NEW -m tcp --dport 80 -j ACCEPT
 # Allow HTTPS (port 443)
 -A INPUT -p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT
-# Allow additional ports if needed (e.g., 8000)
+# Allow additional port (e.g., 8000)
 -A INPUT -p tcp -m state --state NEW -m tcp --dport 8000 -j ACCEPT
 # Drop all other incoming traffic
 -A INPUT -j DROP
@@ -66,7 +70,7 @@ EOF
 sudo iptables-restore < /etc/iptables/rules.v4
 
 # -----------------------------------------------------------
-# Ⅱ. APPLICATION SETUP
+# II. APPLICATION SETUP
 # -----------------------------------------------------------
 log "Setting up the application environment in ${APP_DIR}..."
 
@@ -83,20 +87,20 @@ source venv/bin/activate
 pip install --upgrade pip setuptools wheel cython
 
 # -----------------------------------------------------------
-# Ⅱ.A. BACKEND SETUP
+# II.A. BACKEND SETUP
 # -----------------------------------------------------------
 log "Installing backend dependencies..."
 cd "${BACKEND_DIR}"
-pip install -r ../requirements.txt
+# Use an absolute path to the requirements file
+pip install -r "${BACKEND_DIR}/requirements.txt"
 
 log "Initializing database (creating tables)..."
-# Change directory into backend so that the module path works.
-cd "${BACKEND_DIR}"
-# Run the database module; if it fails, log a warning.
-python3 -m app.database || log "Database initialization failed; please check the logs."
+# Run the database module. Ensure that your database module (database.py)
+# uses a concrete client implementation from libsql_client.
+python3 -m app.database || log "Database initialization failed; please check your logs."
 
 # -----------------------------------------------------------
-# Ⅱ.B. FRONTEND SETUP
+# II.B. FRONTEND SETUP
 # -----------------------------------------------------------
 log "Building frontend..."
 cd "${FRONTEND_DIR}"
@@ -109,7 +113,7 @@ sudo rm -rf "${WEB_ROOT:?}"/*
 sudo cp -r dist/* "${WEB_ROOT}/"
 
 # -----------------------------------------------------------
-# Ⅲ. CREATE SYSTEMD SERVICE FOR BACKEND
+# III. CREATE SYSTEMD SERVICE FOR BACKEND
 # -----------------------------------------------------------
 log "Creating systemd service for backend..."
 sudo tee ${SERVICE_FILE} > /dev/null <<EOF
@@ -132,7 +136,7 @@ sudo systemctl enable tfrtita333.service
 sudo systemctl restart tfrtita333.service
 
 # -----------------------------------------------------------
-# Ⅳ. NGINX CONFIGURATION & SSL SETUP
+# IV. NGINX CONFIGURATION & SSL SETUP
 # -----------------------------------------------------------
 log "Configuring Nginx for ${DOMAIN}..."
 NGINX_CONF="/etc/nginx/sites-available/${DOMAIN}"
@@ -197,7 +201,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 
 # -----------------------------------------------------------
-# Ⅴ. OBTAIN SSL CERTIFICATE WITH CERTBOT
+# V. OBTAIN SSL CERTIFICATE WITH CERTBOT
 # -----------------------------------------------------------
 log "Waiting for any running Certbot instance to finish..."
 while pgrep -x certbot >/dev/null; do
@@ -209,7 +213,7 @@ log "Obtaining SSL certificate via Certbot..."
 sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email ${EMAIL}
 
 # -----------------------------------------------------------
-# Ⅵ. FINAL RESTART OF SERVICES
+# VI. FINAL RESTART OF SERVICES
 # -----------------------------------------------------------
 log "Restarting Nginx and backend service..."
 sudo systemctl restart nginx
