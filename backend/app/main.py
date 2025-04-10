@@ -1,6 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from .database import create_tables, get_db_connection, DBError # Import create_tables and DB helpers
+from .database import create_tables, get_db_connection, Error as DBError # Import create_tables and DB helpers (using mysql.connector.Error as DBError)
 # Import routes
 from .routes import credentials, calls # Added calls router
 # Import services
