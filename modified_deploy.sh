@@ -132,8 +132,8 @@ After=network.target
 User=root
 WorkingDirectory=${BACKEND_DIR}
 # Removed EnvironmentFile for debugging
-# Using explicit paths and only 1 worker for debugging
-ExecStart=${APP_DIR}/venv/bin/python3 ${APP_DIR}/venv/bin/gunicorn -k uvicorn.workers.UvicornWorker -w 1 --bind 127.0.0.1:8080 app.main:app
+# Using explicit absolute paths and only 1 worker for debugging
+ExecStart=/root/tfrtita33333333333/venv/bin/python3 /root/tfrtita33333333333/venv/bin/gunicorn -k uvicorn.workers.UvicornWorker -w 1 --bind 127.0.0.1:8080 app.main:app
 Restart=always
 # Redirect stdout and stderr to files for debugging
 StandardOutput=file:/tmp/tfrtita333.stdout.log
