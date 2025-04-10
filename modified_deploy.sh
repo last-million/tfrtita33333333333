@@ -146,6 +146,7 @@ Environment="DB_NAME=tfrtita_db"
 Environment="ULTRAVOX_API_KEY=your_ultravox_api_key" # Ensure this is replaced with actual key
 Environment="TWILIO_ACCOUNT_SID=your_account_sid" # Ensure this is replaced with actual key
 Environment="TWILIO_AUTH_TOKEN=your_auth_token" # Ensure this is replaced with actual key
+Environment="TWILIO_FROM_NUMBER=your_twilio_number" # Added - Ensure this is replaced with actual number
 Environment="BASE_URL=https://ajingolik.fun"
 
 [Install]
