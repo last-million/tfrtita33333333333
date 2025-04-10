@@ -9,7 +9,11 @@ from .config import settings
 # Try to import and instantiate the LibSQL synchronous client.
 try:
     from libsql_client.sync import Client as SyncClient
-    db = SyncClient(url=settings.database_url)
+    # Instantiate without arguments as indicated by the error message
+    # It likely reads connection info from environment variables (DATABASE_URL)
+    db = SyncClient()
+    # Optionally, add a check or execute a simple query to confirm connection
+    db.execute("SELECT 1")
     print("Connected to LibSQL database using SyncClient")
 except Exception as e:
     print(f"Error connecting to LibSQL database using SyncClient: {e}")
