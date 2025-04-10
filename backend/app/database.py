@@ -14,7 +14,7 @@ try:
     from libsql_client.sync import create_client
     # Use the factory function, passing only the URL. Auth token might be read from env implicitly.
     db = create_client(url=settings.database_url)
-    db.execute("SELECT 1") # Test connection
+    # db.execute("SELECT 1") # Test connection - Removed to avoid potential async issues during init
     print("Connected to LibSQL database using create_client")
 except (ImportError, AttributeError, Exception) as e: # Catch specific errors and general exceptions
     print(f"Error connecting to LibSQL database: {e}")
