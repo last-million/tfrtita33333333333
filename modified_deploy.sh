@@ -132,8 +132,8 @@ After=network.target
 User=root
 WorkingDirectory=${BACKEND_DIR}
 # Removed EnvironmentFile for debugging
-# Trying simplest possible command for debugging EXEC error
-ExecStart=/root/tfrtita33333333333/venv/bin/python3 -c "import sys; print(f'EXEC TEST OK: {sys.executable}')"
+# Trying /usr/bin/env python3 as last resort for EXEC error
+ExecStart=/usr/bin/env python3 -c "import sys; print(f'EXEC TEST OK: {sys.executable}')"
 Restart=always
 # Redirect stdout and stderr to files for debugging
 StandardOutput=file:/tmp/tfrtita333.stdout.log
