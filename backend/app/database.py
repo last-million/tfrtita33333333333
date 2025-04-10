@@ -80,8 +80,10 @@ def create_tables():
                 start_time DATETIME,
                 end_time DATETIME,
                 duration INTEGER,
-                recording_url TEXT,
-                transcription LONGTEXT
+                recording_url TEXT, # Twilio's recording URL (optional backup)
+                transcription LONGTEXT,
+                agent_hangup_reason TEXT NULL, # Added for Ultravox hangup reason
+                ultravox_recording_url TEXT NULL # Added for Ultravox recording URL
             );
             """
         )
