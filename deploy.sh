@@ -122,7 +122,7 @@ Description=Tfrtita333 App Backend
 After=network.target
 
 [Service]
-User=ubuntu
+User=root # Changed from ubuntu to root
 WorkingDirectory=${BACKEND_DIR}
 ExecStart=${APP_DIR}/venv/bin/gunicorn -k uvicorn.workers.UvicornWorker -w 3 --bind 127.0.0.1:8080 app.main:app
 Restart=always
