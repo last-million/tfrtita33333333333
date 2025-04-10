@@ -6,66 +6,60 @@ if that fails, it falls back to a simple SQLite-based implementation.
 
 from .config import settings
 
+db = None # Initialize db to None
+
 # Try to import and instantiate the LibSQL synchronous client.
 try:
-    # Try importing a potential factory function instead of the abstract class
+    # Try importing the factory function
     from libsql_client.sync import create_client
-    # Use the factory function, passing the URL from settings
-    db = create_client(url=settings.database_url, auth_token=settings.database_auth_token) # Assuming auth_token might also be needed
+    # Use the factory function, passing only the URL. Auth token might be read from env implicitly.
+    db = create_client(url=settings.database_url)
     db.execute("SELECT 1") # Test connection
     print("Connected to LibSQL database using create_client")
-except ImportError:
-    # Fallback if create_client doesn't exist, try original approach again just in case
-    try:
-        from libsql_client.sync import Client as SyncClient
-        db = SyncClient(url=settings.database_url, auth_token=settings.database_auth_token)
-        db.execute("SELECT 1")
-        print("Connected to LibSQL database using SyncClient(url=...)")
-    except Exception as e:
-        print(f"Error connecting to LibSQL database: {e}")
-        print("Falling back to a concrete SQLite implementation (in-memory).")
-        db = None # Ensure db is None before fallback
-except Exception as e:
+except (ImportError, AttributeError, Exception) as e: # Catch specific errors and general exceptions
     print(f"Error connecting to LibSQL database: {e}")
-    # Fallback: use sqlite3 only if db is still None after trying LibSQL
-    if db is None:
-        print("Falling back to a concrete SQLite implementation (in-memory).")
-        import sqlite3
+    db = None # Ensure db is None if connection fails
 
-        class ConcreteClient:
-            def __init__(self, url):
-                # For demonstration, we ignore the URL and use an in-memory SQLite database.
-                self.conn = sqlite3.connect(":memory:")
-                self.closed = False
+# Fallback: use sqlite3 only if db is still None after trying LibSQL
+if db is None:
+    print("Falling back to a concrete SQLite implementation (in-memory).")
+    import sqlite3
 
-            def execute(self, query):
-                cur = self.conn.cursor()
+    # Corrected indentation for the class and its methods
+    class ConcreteClient:
+        def __init__(self, url):
+            # For demonstration, we ignore the URL and use an in-memory SQLite database.
+            self.conn = sqlite3.connect(":memory:")
+            self.closed = False
+
+        def execute(self, query):
+            cur = self.conn.cursor()
+            cur.execute(query)
+            self.conn.commit()
+
+        def transaction(self):
+            # Return self as a context manager.
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            # No special exit handling.
+            pass
+
+        def batch(self, queries):
+            cur = self.conn.cursor()
+            for query in queries:
                 cur.execute(query)
-                self.conn.commit()
+            self.conn.commit()
 
-            def transaction(self):
-                # Return self as a context manager.
-                return self
+        def close(self):
+            self.conn.close()
+            self.closed = True
 
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc_val, exc_tb):
-                # No special exit handling.
-                pass
-
-            def batch(self, queries):
-                cur = self.conn.cursor()
-                for query in queries:
-                    cur.execute(query)
-                self.conn.commit()
-
-            def close(self):
-                self.conn.close()
-                self.closed = True
-
-        db = ConcreteClient(url=settings.database_url) # url is unused here but kept for consistency
-        print("Connected to fallback SQLite in-memory database.")
+    db = ConcreteClient(url=settings.database_url) # url is unused here but kept for consistency
+    print("Connected to fallback SQLite in-memory database.")
 
 
 
