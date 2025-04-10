@@ -1,10 +1,11 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from .database import create_tables, get_db_connection, Error as DBError # Import create_tables and DB helpers (using mysql.connector.Error as DBError)
 # Import routes
 from .routes import credentials, calls # Added calls router
 # Import services
-from .services import ultravox_service # Assuming this contains setup/API key logic if needed
+# from .services import ultravox_service # Assuming this contains setup/API key logic if needed - Keep commented for now
 from .config import settings # Import settings to get API keys etc.
 import logging
 import json
@@ -12,16 +13,19 @@ import base64
 from pydub import AudioSegment # For audio conversion
 import io # For handling audio bytes in memory
 import sys # Import sys
+import audioop # For mulaw conversion
 
 # Configure logging (Ensure this is very early)
 logging.basicConfig(level=logging.INFO) # Basic config for root logger
 logger = logging.getLogger(__name__)
 
 # Print sys.path right before the import that fails
-logger.info(f"Python sys.path: {sys.path}")
+# logger.info(f"Python sys.path: {sys.path}") # Keep commented out for now
 
-# Import Ultravox client library (Correcting import path AGAIN after git pull)
-from ultravox_client import Client as UltravoxClient # Use the installed package name
+# Import Ultravox client library (Corrected import path again)
+# import ultravox_client # Trying base import
+# from ultravox_client import Client as UltravoxClient # Import Client directly from the package - This caused ImportError
+# Let's assume the service handles the client for now, or comment out usage below
 
 
 app = FastAPI()
@@ -41,14 +45,7 @@ app.include_router(calls.router, prefix="/api/calls", tags=["Calls"]) # Added ca
 
 @app.on_event("startup")
 def startup_event(): # Changed to sync for MySQL
-    # The create_tables function now runs within init_db_pool or directly if module is run
-    # We might not need to explicitly call it here if database.py handles it on import.
-    # However, calling it ensures tables exist if the module wasn't run directly.
     logger.info("Running startup event: Ensuring database tables exist.")
-    # Check if pool was initialized successfully before trying to create tables
-    # Note: database.py already tries to create tables if run directly.
-    # Consider if this call is redundant or necessary based on deployment strategy.
-    # For safety, we can call it, the function handles None connection.
     create_tables()
 
 @app.get("/")
@@ -67,6 +64,9 @@ async def websocket_endpoint(websocket: WebSocket):
     caller_number = None
     stream_sid = None # Twilio sends a streamSid in the 'start' message
 
+    # Placeholder for Ultravox client instance if needed outside the loop
+    # uv_client_instance = None
+
     try:
         while True:
             message = await websocket.receive_text()
@@ -83,82 +83,30 @@ async def websocket_endpoint(websocket: WebSocket):
                 call_sid = data.get('start', {}).get('customParameters', {}).get('callSid')
                 caller_number = data.get('start', {}).get('customParameters', {}).get('callerNumber')
                 logger.info(f"Media stream started: streamSid={stream_sid}, callSid={call_sid}, caller={caller_number}")
-                # TODO: Potentially log stream start or update call log
+                # TODO: Initialize Ultravox client session here if needed
 
             elif event == "media":
                 # Process incoming audio chunk
                 payload = data.get('media', {}).get('payload')
                 if payload:
-                    # Audio is base64 encoded Mulaw
                     audio_chunk = base64.b64decode(payload)
                     logger.debug(f"Received audio chunk: {len(audio_chunk)} bytes for stream {stream_sid}")
 
-                    # --- Ultravox Interaction ---
-                    try:
-                        # 1. Convert Twilio's mulaw/8kHz to PCM/16kHz (adjust target format if needed)
-                        audio_segment = AudioSegment(
-                            data=audio_chunk,
-                            sample_width=1, # 8-bit for mulaw
-                            frame_rate=8000,
-                            channels=1
-                        )
-                        # Decode from mulaw (pydub doesn't have direct mulaw, treat as 8-bit PCM then convert)
-                        # This might need adjustment or a different library if direct mulaw->PCM is required.
-                        # Assuming pydub handles it as linear 8-bit for conversion purposes.
-                        # Resample and set sample width for 16-bit PCM
-                        pcm_segment = audio_segment.set_frame_rate(16000).set_sample_width(2)
-                        pcm_chunk = pcm_segment.raw_data
-
-                        # 2. Send to Ultravox (ensure client is initialized correctly)
-                        # This assumes an async client interface. Adjust if sync.
-                        # You might need to manage the Ultravox client lifecycle (connect/disconnect)
-                        # or use a context manager if the library supports it.
-                        # Ensure ULTRAVOX_API_KEY is loaded via settings
-                        async with UltravoxClient(api_key=settings.ultravox_api_key) as uv_client:
-                            # Example: Send audio chunk for processing
-                            # The exact method depends on the ultravox-client library API
-                            # This is a guess based on common streaming patterns
-                            ultravox_response = await uv_client.streaming_process(pcm_chunk) # Fictional method
-
-                            # 3. Handle Ultravox response (e.g., generated audio)
-                            if ultravox_response and ultravox_response.audio:
-                                response_pcm_chunk = ultravox_response.audio # Assuming response is PCM
-
-                                # 4. Convert response PCM back to mulaw/8kHz for Twilio
-                                response_segment = AudioSegment(
-                                    data=response_pcm_chunk,
-                                    sample_width=2, # Assuming 16-bit PCM response
-                                    frame_rate=16000, # Assuming 16kHz response
-                                    channels=1
-                                )
-                                twilio_segment = response_segment.set_frame_rate(8000).set_sample_width(1)
-                                # Encode to mulaw (again, pydub might need help here, this is simplified)
-                                # For proper mulaw encoding, you might need `audioop.lin2ulaw`
-                                import audioop
-                                mulaw_response_bytes = audioop.lin2ulaw(twilio_segment.raw_data, 1)
-
-                                # 5. Send audio back to Twilio
-                                response_payload = base64.b64encode(mulaw_response_bytes).decode('utf-8')
-                                await websocket.send_text(json.dumps({
-                                    "event": "media",
-                                    "streamSid": stream_sid,
-                                    "media": {
-                                        "payload": response_payload
-                                    }
-                                }))
-                                logger.debug(f"Sent {len(mulaw_response_bytes)} bytes back to Twilio for stream {stream_sid}")
-
-                    except Exception as e:
-                        logger.error(f"Error processing audio chunk with Ultravox for {call_sid}: {e}")
-                    # --- End Ultravox Interaction ---
-
+                    # --- Placeholder Ultravox Interaction ---
+                    # TODO: Implement actual audio processing and response generation
+                    # 1. Convert audio_chunk (mulaw) to PCM
+                    # 2. Send pcm_chunk to Ultravox service/client
+                    # 3. Receive response_pcm_chunk from Ultravox
+                    # 4. Convert response_pcm_chunk back to mulaw
+                    # 5. Send mulaw_response_bytes back to Twilio via WebSocket
+                    pass # Remove this pass when implementing
 
             elif event == "mark":
                 logger.info(f"Received mark event: {data.get('mark')}")
 
             elif event == "stop":
                 logger.info(f"Media stream stopped: {data}")
-                # TODO: Potentially log stream end or update call log
+                # TODO: Clean up Ultravox client session if needed
                 break # Exit loop on stop event
 
             else:
@@ -169,14 +117,13 @@ async def websocket_endpoint(websocket: WebSocket):
         # TODO: Handle disconnection, maybe update call log status if needed
     except Exception as e:
         logger.error(f"WebSocket error: {e} (streamSid={stream_sid}, callSid={call_sid})")
-        # Attempt to close gracefully if possible
         try:
             await websocket.close(code=1011) # Internal Error
         except RuntimeError:
             pass # Already closed
     finally:
         logger.info(f"Closing WebSocket handler for streamSid={stream_sid}, callSid={call_sid}")
-        # Any final cleanup
+        # TODO: Ensure any Ultravox resources are cleaned up
 
 # --- Ultravox Webhook ---
 @app.post("/ultravox-webhook")
@@ -190,23 +137,16 @@ async def ultravox_webhook_handler(request: Request):
     payload = {}
     try:
         # TODO: Implement webhook signature verification (HMAC-SHA256) for security
-        # signature = request.headers.get('X-Ultravox-Webhook-Signature')
-        # timestamp = request.headers.get('X-Ultravox-Webhook-Timestamp')
-        # raw_payload = await request.body()
-        # if not verify_webhook(signature, timestamp, raw_payload):
-        #     logger.warning("Invalid webhook signature received.")
-        #     raise HTTPException(status_code=403, detail="Invalid signature")
 
         payload = await request.json()
         event_type = payload.get('event')
 
         if event_type == 'call.ended':
             call_data = payload.get('call', {})
-            call_sid = call_data.get('id') # Assuming Ultravox 'id' matches Twilio 'CallSid'
-            transcription = call_data.get('transcription') # Or transcript_url if it's a URL
+            call_sid = call_data.get('id')
+            transcription = call_data.get('transcription')
             recording_url = call_data.get('recording_url')
             agent_hangup_reason = call_data.get('agent_hangup_reason')
-            # duration = call_data.get('duration') # Could also update duration here
 
             if not call_sid:
                 logger.error("Call ID missing in Ultravox call.ended webhook.")
@@ -217,11 +157,9 @@ async def ultravox_webhook_handler(request: Request):
             conn = get_db_connection()
             if conn is None:
                 logger.error(f"Database connection unavailable for Ultravox webhook: {call_sid}")
-                # Return 503? Ultravox might retry.
                 raise HTTPException(status_code=503, detail="Database unavailable")
 
             cursor = conn.cursor()
-
             update_fields = []
             params = []
             if transcription:
@@ -233,13 +171,12 @@ async def ultravox_webhook_handler(request: Request):
             if agent_hangup_reason:
                 update_fields.append("agent_hangup_reason = %s")
                 params.append(agent_hangup_reason)
-            # Could also update status/end_time here if needed
 
             if not update_fields:
                 logger.info(f"No relevant fields to update from Ultravox webhook for CallSid: {call_sid}")
                 return Response(status_code=200)
 
-            params.append(call_sid) # For the WHERE clause
+            params.append(call_sid)
             sql = f"UPDATE call_logs SET {', '.join(update_fields)} WHERE call_sid = %s"
 
             logger.info(f"Executing SQL from Ultravox webhook: {sql} with params: {params}")
@@ -250,14 +187,13 @@ async def ultravox_webhook_handler(request: Request):
             return Response(status_code=200)
         else:
             logger.info(f"Received unhandled Ultravox event type: {event_type}")
-            return Response(status_code=200) # Acknowledge other events
+            return Response(status_code=200)
 
     except json.JSONDecodeError:
         logger.error("Failed to decode JSON from Ultravox webhook.")
         raise HTTPException(status_code=400, detail="Invalid JSON")
     except DBError as e:
         logger.error(f"Database error processing Ultravox webhook for call {payload.get('call', {}).get('id')}: {e}")
-        # Return 500 to potentially trigger retry from Ultravox
         raise HTTPException(status_code=500, detail="Database processing error")
     except Exception as e:
         logger.error(f"Unexpected error processing Ultravox webhook for call {payload.get('call', {}).get('id')}: {e}")
