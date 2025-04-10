@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_key: str
     google_client_id: str
+    google_client_secret: str # Added Google Client Secret
     airtable_api_key: str = ""  # Default value if not provided in .env
     ultravox_api_key: str
     # database_url: str = "file:./data.db" # Removed, using specific DB vars now
