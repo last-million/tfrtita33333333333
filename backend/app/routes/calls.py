@@ -52,6 +52,9 @@ class Client(BaseModel):
 # Instantiate Twilio Service
 twilio_service = TwilioService()
 
+# Instantiate Twilio Service
+twilio_service = TwilioService() # Moved instantiation outside function
+
 @router.post("/initiate")
 async def initiate_single_call(to_number: str, from_number: str):
     """
@@ -61,11 +64,17 @@ async def initiate_single_call(to_number: str, from_number: str):
         # URL for Twilio to fetch TwiML instructions when the call connects
         # This should point to an endpoint that returns TwiML, e.g., connecting to the media stream
         # For now, using a placeholder TwiML URL - THIS NEEDS TO BE IMPLEMENTED
+        # Ensure from_number is provided or use default from settings
+        effective_from_number = from_number or settings.twilio_from_number
+        if not effective_from_number:
+             raise HTTPException(status_code=400, detail="Missing 'from_number' and no default configured.")
+
         twiml_url = f"{settings.base_url}/api/calls/outbound-twiml/{to_number}" # Example URL structure
 
-        logger.info(f"Initiating call to {to_number} from {from_number} with TwiML URL: {twiml_url}")
-        call = twilio_service.make_call(to_number=to_number, from_number=from_number, url=twiml_url)
-        logger.info(f"Call initiated with SID: {call.sid}")
+        logger.info(f"Attempting to initiate call via TwilioService to {to_number} from {effective_from_number}...")
+        call = twilio_service.make_call(to_number=to_number, from_number=effective_from_number, url=twiml_url)
+        # Log SID immediately after successful API call
+        logger.info(f"Twilio call object created with SID: {call.sid}")
         return {
             "status": "call_initiated",
             "call_sid": call.sid,
@@ -123,18 +132,21 @@ async def bulk_call_campaign(request: BulkCallRequest):
     """
     results = []
     # TODO: Get the 'from_number' from configuration or user settings
-    from_number = settings.twilio_from_number # Assuming this exists in settings/.env
-
+    # Use the configured Twilio 'From' number
+    from_number = settings.twilio_from_number
     if not from_number:
+         logger.error("Missing TWILIO_FROM_NUMBER in configuration for bulk call.")
          raise HTTPException(status_code=500, detail="Twilio 'from' number not configured.")
 
+    logger.info(f"Starting bulk call campaign from {from_number} to {len(request.phone_numbers)} numbers.")
     for number in request.phone_numbers:
         try:
             # URL for Twilio to fetch TwiML instructions when the call connects
-            twiml_url = f"{settings.base_url}/api/calls/outbound-twiml/{number}" # Example URL structure
+            twiml_url = f"{settings.base_url}/api/calls/outbound-twiml/{number}"
 
-            logger.info(f"Initiating bulk call to {number} from {from_number} with TwiML URL: {twiml_url}")
+            logger.info(f"Attempting bulk call via TwilioService to {number} from {from_number}...")
             call = twilio_service.make_call(to_number=number, from_number=from_number, url=twiml_url)
+            # Log SID immediately after successful API call
             logger.info(f"Bulk call initiated to {number} with SID: {call.sid}")
             results.append({
                 "number": number,
