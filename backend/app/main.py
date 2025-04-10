@@ -170,3 +170,93 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         logger.info(f"Closing WebSocket handler for streamSid={stream_sid}, callSid={call_sid}")
         # Any final cleanup
+
+# --- Ultravox Webhook ---
+@app.post("/ultravox-webhook")
+async def ultravox_webhook_handler(request: Request):
+    """
+    Handle incoming webhooks from Ultravox, specifically 'call.ended'.
+    Updates the call log with transcription, recording URL, and hangup reason.
+    """
+    conn = None
+    cursor = None
+    payload = {}
+    try:
+        # TODO: Implement webhook signature verification (HMAC-SHA256) for security
+        # signature = request.headers.get('X-Ultravox-Webhook-Signature')
+        # timestamp = request.headers.get('X-Ultravox-Webhook-Timestamp')
+        # raw_payload = await request.body()
+        # if not verify_webhook(signature, timestamp, raw_payload):
+        #     logger.warning("Invalid webhook signature received.")
+        #     raise HTTPException(status_code=403, detail="Invalid signature")
+
+        payload = await request.json()
+        event_type = payload.get('event')
+
+        if event_type == 'call.ended':
+            call_data = payload.get('call', {})
+            call_sid = call_data.get('id') # Assuming Ultravox 'id' matches Twilio 'CallSid'
+            transcription = call_data.get('transcription') # Or transcript_url if it's a URL
+            recording_url = call_data.get('recording_url')
+            agent_hangup_reason = call_data.get('agent_hangup_reason')
+            # duration = call_data.get('duration') # Could also update duration here
+
+            if not call_sid:
+                logger.error("Call ID missing in Ultravox call.ended webhook.")
+                return Response(status_code=400, detail="Missing call ID")
+
+            logger.info(f"Received Ultravox call.ended webhook for CallSid: {call_sid}")
+
+            conn = get_db_connection()
+            if conn is None:
+                logger.error(f"Database connection unavailable for Ultravox webhook: {call_sid}")
+                # Return 503? Ultravox might retry.
+                raise HTTPException(status_code=503, detail="Database unavailable")
+
+            cursor = conn.cursor()
+
+            update_fields = []
+            params = []
+            if transcription:
+                update_fields.append("transcription = %s")
+                params.append(transcription)
+            if recording_url:
+                update_fields.append("ultravox_recording_url = %s")
+                params.append(recording_url)
+            if agent_hangup_reason:
+                update_fields.append("agent_hangup_reason = %s")
+                params.append(agent_hangup_reason)
+            # Could also update status/end_time here if needed
+
+            if not update_fields:
+                logger.info(f"No relevant fields to update from Ultravox webhook for CallSid: {call_sid}")
+                return Response(status_code=200)
+
+            params.append(call_sid) # For the WHERE clause
+            sql = f"UPDATE call_logs SET {', '.join(update_fields)} WHERE call_sid = %s"
+
+            logger.info(f"Executing SQL from Ultravox webhook: {sql} with params: {params}")
+            cursor.execute(sql, tuple(params))
+            conn.commit()
+            logger.info(f"Call log updated from Ultravox webhook for CallSid: {call_sid}")
+
+            return Response(status_code=200)
+        else:
+            logger.info(f"Received unhandled Ultravox event type: {event_type}")
+            return Response(status_code=200) # Acknowledge other events
+
+    except json.JSONDecodeError:
+        logger.error("Failed to decode JSON from Ultravox webhook.")
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except DBError as e:
+        logger.error(f"Database error processing Ultravox webhook for call {payload.get('call', {}).get('id')}: {e}")
+        # Return 500 to potentially trigger retry from Ultravox
+        raise HTTPException(status_code=500, detail="Database processing error")
+    except Exception as e:
+        logger.error(f"Unexpected error processing Ultravox webhook for call {payload.get('call', {}).get('id')}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
