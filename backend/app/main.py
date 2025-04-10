@@ -3,11 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from .database import create_tables, get_db_connection, DBError # Import create_tables and DB helpers
 # Import routes
 from .routes import credentials, calls # Added calls router
-# Import services (assuming ultravox service exists)
-from .services import ultravox_service
+# Import services
+from .services import ultravox_service # Assuming this contains setup/API key logic if needed
+from .config import settings # Import settings to get API keys etc.
 import logging
 import json
 import base64
+from pydub import AudioSegment # For audio conversion
+import io # For handling audio bytes in memory
+# Import Ultravox client library
+from ultravox.client import Client as UltravoxClient # Renamed to avoid conflict
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -81,27 +86,64 @@ async def websocket_endpoint(websocket: WebSocket):
                     audio_chunk = base64.b64decode(payload)
                     logger.debug(f"Received audio chunk: {len(audio_chunk)} bytes for stream {stream_sid}")
 
-                    # --- Placeholder for Ultravox Interaction ---
+                    # --- Ultravox Interaction ---
                     try:
-                        # This function needs to exist in ultravox_service and handle raw audio bytes
-                        # It might be async or sync depending on its implementation
-                        # response_audio = await ultravox_service.process_speech_chunk(call_sid, audio_chunk)
-                        response_audio = None # Replace with actual call
+                        # 1. Convert Twilio's mulaw/8kHz to PCM/16kHz (adjust target format if needed)
+                        audio_segment = AudioSegment(
+                            data=audio_chunk,
+                            sample_width=1, # 8-bit for mulaw
+                            frame_rate=8000,
+                            channels=1
+                        )
+                        # Decode from mulaw (pydub doesn't have direct mulaw, treat as 8-bit PCM then convert)
+                        # This might need adjustment or a different library if direct mulaw->PCM is required.
+                        # Assuming pydub handles it as linear 8-bit for conversion purposes.
+                        # Resample and set sample width for 16-bit PCM
+                        pcm_segment = audio_segment.set_frame_rate(16000).set_sample_width(2)
+                        pcm_chunk = pcm_segment.raw_data
 
-                        if response_audio:
-                            # If Ultravox responds with audio to play back, encode it and send via Twilio Mark/Media message
-                            # response_payload = base64.b64encode(response_audio).decode('utf-8')
-                            # await websocket.send_text(json.dumps({
-                            #     "event": "media",
-                            #     "streamSid": stream_sid,
-                            #     "media": {
-                            #         "payload": response_payload
-                            #     }
-                            # }))
-                            pass # Placeholder for sending response audio
+                        # 2. Send to Ultravox (ensure client is initialized correctly)
+                        # This assumes an async client interface. Adjust if sync.
+                        # You might need to manage the Ultravox client lifecycle (connect/disconnect)
+                        # or use a context manager if the library supports it.
+                        # Ensure ULTRAVOX_API_KEY is loaded via settings
+                        async with UltravoxClient(api_key=settings.ultravox_api_key) as uv_client:
+                            # Example: Send audio chunk for processing
+                            # The exact method depends on the ultravox-client library API
+                            # This is a guess based on common streaming patterns
+                            ultravox_response = await uv_client.streaming_process(pcm_chunk) # Fictional method
+
+                            # 3. Handle Ultravox response (e.g., generated audio)
+                            if ultravox_response and ultravox_response.audio:
+                                response_pcm_chunk = ultravox_response.audio # Assuming response is PCM
+
+                                # 4. Convert response PCM back to mulaw/8kHz for Twilio
+                                response_segment = AudioSegment(
+                                    data=response_pcm_chunk,
+                                    sample_width=2, # Assuming 16-bit PCM response
+                                    frame_rate=16000, # Assuming 16kHz response
+                                    channels=1
+                                )
+                                twilio_segment = response_segment.set_frame_rate(8000).set_sample_width(1)
+                                # Encode to mulaw (again, pydub might need help here, this is simplified)
+                                # For proper mulaw encoding, you might need `audioop.lin2ulaw`
+                                import audioop
+                                mulaw_response_bytes = audioop.lin2ulaw(twilio_segment.raw_data, 1)
+
+                                # 5. Send audio back to Twilio
+                                response_payload = base64.b64encode(mulaw_response_bytes).decode('utf-8')
+                                await websocket.send_text(json.dumps({
+                                    "event": "media",
+                                    "streamSid": stream_sid,
+                                    "media": {
+                                        "payload": response_payload
+                                    }
+                                }))
+                                logger.debug(f"Sent {len(mulaw_response_bytes)} bytes back to Twilio for stream {stream_sid}")
+
                     except Exception as e:
                         logger.error(f"Error processing audio chunk with Ultravox for {call_sid}: {e}")
-                    # --- End Placeholder ---
+                    # --- End Ultravox Interaction ---
 
 
             elif event == "mark":
