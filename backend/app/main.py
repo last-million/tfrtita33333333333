@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 # Print sys.path right before the import that fails
 logger.info(f"Python sys.path: {sys.path}")
 
-# Import Ultravox client library
-from ultravox.client import Client as UltravoxClient # Renamed to avoid conflict
+# Import Ultravox client library (Corrected import path)
+from ultravox_client.client import Client as UltravoxClient # Use the installed package name
 
 
 app = FastAPI()
