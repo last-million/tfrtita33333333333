@@ -132,8 +132,8 @@ After=network.target
 User=root
 WorkingDirectory=${BACKEND_DIR}
 # Removed EnvironmentFile for debugging
-# Using explicit absolute paths and running directly with uvicorn for debugging
-ExecStart=/root/tfrtita33333333333/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080 --workers 1
+# Using explicit absolute paths and gunicorn executable directly, 1 worker
+ExecStart=/root/tfrtita33333333333/venv/bin/gunicorn -k uvicorn.workers.UvicornWorker -w 1 --bind 127.0.0.1:8080 app.main:app
 Restart=always
 # Redirect stdout and stderr to files for debugging
 StandardOutput=file:/tmp/tfrtita333.stdout.log
