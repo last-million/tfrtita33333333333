@@ -27,5 +27,5 @@ twilio
 # Pydantic Settings (this will install Pydantic v2.x)
 pydantic-settings
 
-# LibSQL
-libsql_client==0.3.1 # Removed duplicate entry
+# MySQL Connector
+mysql-connector-python
