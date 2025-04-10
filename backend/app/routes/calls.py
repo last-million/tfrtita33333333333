@@ -91,10 +91,11 @@ async def bulk_call_campaign(request: BulkCallRequest):
 def get_call_history(
     page: int = 1,
     limit: int = 50,
-    status: Optional[str] = None
+    status: Optional[str] = None,
+    direction: Optional[str] = None # Added direction filter
 ):
     """
-    Retrieve paginated call history with optional filtering from MySQL.
+    Retrieve paginated call history with optional filtering by status and direction from MySQL.
     """
     conn = None
     cursor = None
@@ -115,6 +116,11 @@ def get_call_history(
         if status:
             conditions.append("status = %s")
             params.append(status)
+
+        # Add direction filter if provided
+        if direction:
+            conditions.append("direction = %s")
+            params.append(direction)
 
         # Combine conditions
         if conditions:
@@ -247,7 +253,33 @@ async def incoming_call(request: Request):
         connect.append(stream)
         twiml.append(connect)
 
-        # TODO: Log the start of the call in the database
+        # Log the start of the incoming call
+        conn = None
+        cursor = None
+        try:
+            conn = get_db_connection()
+            if conn:
+                cursor = conn.cursor()
+                sql = """
+                    INSERT INTO call_logs (call_sid, from_number, to_number, direction, status, start_time)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE status = VALUES(status) # Update status if SID exists
+                """
+                # Use Twilio's 'To' number for our 'to_number' field
+                to_number = twilio_params.get('To', 'Unknown')
+                start_time = datetime.utcnow()
+                params = (call_sid, caller_number, to_number, 'inbound', 'initiated', start_time)
+                cursor.execute(sql, params)
+                conn.commit()
+                logger.info(f"Logged start of incoming call: {call_sid}")
+            else:
+                logger.error(f"Database connection unavailable for logging incoming call: {call_sid}")
+        except DBError as e:
+            logger.error(f"Database error logging incoming call {call_sid}: {e}")
+            # Don't fail the call, just log the error
+        finally:
+            if cursor: cursor.close()
+            if conn: conn.close()
 
         return Response(content=str(twiml), media_type="application/xml")
 
@@ -273,8 +305,9 @@ async def call_status_update(request: Request):
 
         call_sid = status_data.get('CallSid')
         call_status = status_data.get('CallStatus')
+        call_direction = status_data.get('Direction') # Added direction
         duration = status_data.get('CallDuration')
-        recording_url = status_data.get('RecordingUrl')
+        recording_url = status_data.get('RecordingUrl') # Twilio recording
         # Add other fields as needed: RecordingDuration, Timestamp, etc.
 
         if not call_sid:
@@ -296,6 +329,9 @@ async def call_status_update(request: Request):
         if call_status:
             update_fields.append("status = %s")
             params.append(call_status)
+        if call_direction: # Add direction if available
+            update_fields.append("direction = %s")
+            params.append(call_direction)
         if duration:
             update_fields.append("duration = %s")
             params.append(int(duration)) # Ensure duration is integer
