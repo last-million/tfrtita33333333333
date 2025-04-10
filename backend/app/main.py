@@ -11,7 +11,10 @@ import json
 import base64
 from pydub import AudioSegment # For audio conversion
 import io # For handling audio bytes in memory
+import sys # Import sys
 # Import Ultravox client library
+# Print sys.path right before the import that fails
+logger.info(f"Python sys.path: {sys.path}")
 from ultravox.client import Client as UltravoxClient # Renamed to avoid conflict
 
 # Configure logging
