@@ -29,3 +29,7 @@ pydantic-settings
 
 # MySQL Connector
 mysql-connector-python
+
+# WebSocket Audio Processing (Added)
+ultravox-client
+pydub # For audio format conversion
