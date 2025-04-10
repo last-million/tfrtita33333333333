@@ -24,32 +24,32 @@ class TwilioService:
             )
             logger.info(f"Twilio call initiated successfully: SID={call.sid}")
 
-            # Log the start of the outbound call only if creation succeeded
-            conn = None
-            cursor = None
-            try:
-                conn = get_db_connection()
-                if conn:
-                    cursor = conn.cursor()
-                    sql = """
-                        INSERT INTO call_logs (call_sid, from_number, to_number, direction, status, start_time)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                        ON DUPLICATE KEY UPDATE status = VALUES(status)
-                    """
-                    start_time = datetime.utcnow()
-                    params = (call.sid, from_number, to_number, 'outbound', 'initiated', start_time)
-                    cursor.execute(sql, params)
-                    conn.commit()
-                    logger.info(f"Logged start of outbound call: {call.sid}")
-                else:
-                    logger.error(f"Database connection unavailable for logging outbound call: {call.sid}")
-            except DBError as e:
-                logger.error(f"Database error logging outbound call {call.sid}: {e}")
-            except Exception as e:
-                 logger.error(f"Unexpected error logging outbound call {call.sid}: {e}")
-            finally:
-                if cursor: cursor.close()
-                if conn: conn.close()
+            # Temporarily comment out database logging to isolate Twilio API call
+            # conn = None
+            # cursor = None
+            # try:
+            #     conn = get_db_connection()
+            #     if conn:
+            #         cursor = conn.cursor()
+            #         sql = """
+            #             INSERT INTO call_logs (call_sid, from_number, to_number, direction, status, start_time)
+            #             VALUES (%s, %s, %s, %s, %s, %s)
+            #             ON DUPLICATE KEY UPDATE status = VALUES(status)
+            #         """
+            #         start_time = datetime.utcnow()
+            #         params = (call.sid, from_number, to_number, 'outbound', 'initiated', start_time)
+            #         cursor.execute(sql, params)
+            #         conn.commit()
+            #         logger.info(f"Logged start of outbound call: {call.sid}")
+            #     else:
+            #         logger.error(f"Database connection unavailable for logging outbound call: {call.sid}")
+            # except DBError as e:
+            #     logger.error(f"Database error logging outbound call {call.sid}: {e}")
+            # except Exception as e:
+            #      logger.error(f"Unexpected error logging outbound call {call.sid}: {e}")
+            # finally:
+            #     if cursor: cursor.close()
+            #     if conn: conn.close()
 
             return call # Return the call object if successful
 
