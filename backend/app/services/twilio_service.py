@@ -1,6 +1,6 @@
 from twilio.rest import Client
 from ..config import settings
-from ..database import get_db_connection, Error as DBError # Added DB imports
+from ..database import get_db_connection, Error as DBError # Added DB imports (using mysql.connector.Error as DBError)
 from datetime import datetime # Added datetime
 import logging # Added logging
 
