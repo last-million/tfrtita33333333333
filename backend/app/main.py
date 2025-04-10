@@ -12,17 +12,17 @@ import base64
 from pydub import AudioSegment # For audio conversion
 import io # For handling audio bytes in memory
 import sys # Import sys
-# Import Ultravox client library
-# Print sys.path right before the import that fails
-logger.info(f"Python sys.path: {sys.path}")
-from ultravox.client import Client as UltravoxClient # Renamed to avoid conflict
 
-# Configure logging (Moved earlier)
+# Configure logging (Ensure this is very early)
 logging.basicConfig(level=logging.INFO) # Basic config for root logger
 logger = logging.getLogger(__name__)
 
 # Print sys.path right before the import that fails
 logger.info(f"Python sys.path: {sys.path}")
+
+# Import Ultravox client library
+from ultravox.client import Client as UltravoxClient # Renamed to avoid conflict
+
 
 app = FastAPI()
 
