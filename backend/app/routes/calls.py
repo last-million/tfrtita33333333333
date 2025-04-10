@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 # Updated database import for MySQL connection pool
-from ..database import get_db_connection, Error as DBError
+from ..database import get_db_connection, Error as DBError # Using mysql.connector.Error as DBError
 from fastapi.responses import Response
 from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
 import logging
