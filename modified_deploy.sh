@@ -135,6 +135,9 @@ WorkingDirectory=${BACKEND_DIR}
 # Using explicit paths and only 1 worker for debugging
 ExecStart=${APP_DIR}/venv/bin/python3 ${APP_DIR}/venv/bin/gunicorn -k uvicorn.workers.UvicornWorker -w 1 --bind 127.0.0.1:8080 app.main:app
 Restart=always
+# Redirect stdout and stderr to files for debugging
+StandardOutput=file:/tmp/tfrtita333.stdout.log
+StandardError=file:/tmp/tfrtita333.stderr.log
 # Add environment variables directly for debugging (less secure, temporary)
 Environment="PYTHONPATH=${BACKEND_DIR}"
 # Add critical env vars directly - replace with actual values from your .env!
