@@ -4,6 +4,9 @@ from typing import List, Optional
 from datetime import datetime
 # Updated database import for MySQL connection pool
 from ..database import get_db_connection, Error as DBError # Using mysql.connector.Error as DBError
+# Import services
+from ..services.twilio_service import TwilioService
+from ..config import settings # To get base_url if needed for TwiML URL
 from fastapi.responses import Response
 from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
 import logging
@@ -46,35 +49,100 @@ class Client(BaseModel):
     email: Optional[str] = None
     address: Optional[str] = None
 
+# Instantiate Twilio Service
+twilio_service = TwilioService()
+
 @router.post("/initiate")
-async def initiate_call(to_number: str, from_number: str):
+async def initiate_single_call(to_number: str, from_number: str):
     """
-    Initiate an outbound call via Twilio (Placeholder)
+    Initiate an outbound call via Twilio.
     """
-    # TODO: Implement actual Twilio call initiation logic using services
-    logger.info(f"Simulating call initiation to {to_number} from {from_number}")
-    return {
-        "status": "call_initiated",
-        "to": to_number,
-        "from": from_number
-    }
+    try:
+        # URL for Twilio to fetch TwiML instructions when the call connects
+        # This should point to an endpoint that returns TwiML, e.g., connecting to the media stream
+        # For now, using a placeholder TwiML URL - THIS NEEDS TO BE IMPLEMENTED
+        twiml_url = f"{settings.base_url}/api/calls/outbound-twiml/{to_number}" # Example URL structure
+
+        logger.info(f"Initiating call to {to_number} from {from_number} with TwiML URL: {twiml_url}")
+        call = twilio_service.make_call(to_number=to_number, from_number=from_number, url=twiml_url)
+        logger.info(f"Call initiated with SID: {call.sid}")
+        return {
+            "status": "call_initiated",
+            "call_sid": call.sid,
+            "to": to_number,
+            "from": from_number
+        }
+    except Exception as e:
+        logger.error(f"Failed to initiate call to {to_number}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to initiate call: {e}")
+
+@router.post("/outbound-twiml/{call_to_number}")
+async def outbound_twiml(call_to_number: str, request: Request):
+    """
+    Generate TwiML for outbound calls to connect to the WebSocket media stream.
+    """
+    # TODO: Replace with actual domain from config/env
+    server_domain = "ajingolik.fun" # Use the actual domain
+    stream_url = f"wss://{server_domain}/media-stream" # Ensure correct path
+
+    try:
+        # Extract CallSid and From number if needed (Twilio might send them)
+        form_data = await request.form()
+        twilio_params = dict(form_data)
+        call_sid = twilio_params.get('CallSid')
+        from_number = twilio_params.get('From') # The Twilio number making the call
+
+        logger.info(f"Generating outbound TwiML for call to {call_to_number}, SID: {call_sid}")
+
+        twiml = VoiceResponse()
+        connect = Connect()
+        stream = Stream(url=stream_url)
+        # Pass necessary parameters to your WebSocket handler
+        stream.parameter(name="callSid", value=call_sid)
+        stream.parameter(name="callerNumber", value=from_number) # 'caller' is our Twilio#
+        stream.parameter(name="calleeNumber", value=call_to_number) # Who we are calling
+        # Add any other parameters your WebSocket needs
+        connect.append(stream)
+        twiml.append(connect)
+
+        return Response(content=str(twiml), media_type="application/xml")
+
+    except Exception as e:
+        logger.error(f"Error generating outbound TwiML for call to {call_to_number}: {e}")
+        # Return a TwiML response indicating an error if possible
+        twiml = VoiceResponse()
+        twiml.say("An application error occurred configuring the call stream.")
+        return Response(content=str(twiml), media_type="application/xml", status_code=500)
+
 
 @router.post("/bulk")
 async def bulk_call_campaign(request: BulkCallRequest):
     """
-    Initiate bulk calls to multiple phone numbers (Placeholder)
+    Initiate bulk calls to multiple phone numbers.
+    Note: Consider using background tasks for large lists.
     """
     results = []
-    # TODO: Replace with actual from_number logic
-    from_number_placeholder = "+1234567890"
+    # TODO: Get the 'from_number' from configuration or user settings
+    from_number = settings.twilio_from_number # Assuming this exists in settings/.env
+
+    if not from_number:
+         raise HTTPException(status_code=500, detail="Twilio 'from' number not configured.")
+
     for number in request.phone_numbers:
         try:
-            # Simulate or actually initiate call for each number
-            # In a real scenario, this might be a background task
-            result = await initiate_call(number, from_number_placeholder)
-            results.append(result)
+            # URL for Twilio to fetch TwiML instructions when the call connects
+            twiml_url = f"{settings.base_url}/api/calls/outbound-twiml/{number}" # Example URL structure
+
+            logger.info(f"Initiating bulk call to {number} from {from_number} with TwiML URL: {twiml_url}")
+            call = twilio_service.make_call(to_number=number, from_number=from_number, url=twiml_url)
+            logger.info(f"Bulk call initiated to {number} with SID: {call.sid}")
+            results.append({
+                "number": number,
+                "status": "call_initiated",
+                "call_sid": call.sid
+            })
         except Exception as e:
-            logger.error(f"Failed to initiate call to {number}: {e}")
+            logger.error(f"Failed to initiate bulk call to {number}: {e}")
             results.append({
                 "number": number,
                 "status": "failed",
