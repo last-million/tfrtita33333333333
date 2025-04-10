@@ -17,8 +17,12 @@ import sys # Import sys
 logger.info(f"Python sys.path: {sys.path}")
 from ultravox.client import Client as UltravoxClient # Renamed to avoid conflict
 
-# Configure logging
+# Configure logging (Moved earlier)
+logging.basicConfig(level=logging.INFO) # Basic config for root logger
 logger = logging.getLogger(__name__)
+
+# Print sys.path right before the import that fails
+logger.info(f"Python sys.path: {sys.path}")
 
 app = FastAPI()
 
