@@ -132,25 +132,24 @@ After=network.target
 User=root
 WorkingDirectory=${BACKEND_DIR}
 # Removed EnvironmentFile for debugging
-# Trying /usr/bin/env python3 as last resort for EXEC error
-ExecStart=/usr/bin/env python3 -c "import sys; print(f'EXEC TEST OK: {sys.executable}')"
+# Restoring Gunicorn command with absolute paths and 1 worker
+ExecStart=/root/tfrtita33333333333/venv/bin/gunicorn -k uvicorn.workers.UvicornWorker -w 1 --bind 127.0.0.1:8080 app.main:app
 Restart=always
 # Redirect stdout and stderr to files for debugging
 StandardOutput=file:/tmp/tfrtita333.stdout.log
 StandardError=file:/tmp/tfrtita333.stderr.log
-# Add environment variables directly for debugging (less secure, temporary)
-# Environment="PYTHONPATH=${BACKEND_DIR}" # Commented out for simplicity
-# Add critical env vars directly - replace with actual values from your .env!
-# Environment="DB_HOST=127.0.0.1" # Commented out for simplicity
-# Environment="DB_PORT=3306" # Commented out for simplicity
-# Environment="DB_USER=tfrtita" # Commented out for simplicity
-# Environment="DB_PASSWORD=AFINasahbi@11" # Commented out for simplicity
-# Environment="DB_NAME=tfrtita_db" # Commented out for simplicity
-# Environment="ULTRAVOX_API_KEY=your_ultravox_api_key" # Commented out for simplicity
-# Environment="TWILIO_ACCOUNT_SID=your_account_sid" # Commented out for simplicity
-# Environment="TWILIO_AUTH_TOKEN=your_auth_token" # Commented out for simplicity
-# Environment="TWILIO_FROM_NUMBER=your_twilio_number" # Commented out for simplicity
-# Environment="BASE_URL=https://ajingolik.fun" # Commented out for simplicity
+# Add environment variables directly (ensure values are correct!)
+Environment="PYTHONPATH=${BACKEND_DIR}"
+Environment="DB_HOST=127.0.0.1"
+Environment="DB_PORT=3306"
+Environment="DB_USER=tfrtita"
+Environment="DB_PASSWORD=AFINasahbi@11"
+Environment="DB_NAME=tfrtita_db"
+Environment="ULTRAVOX_API_KEY=your_ultravox_api_key" # Ensure this is replaced with actual key
+Environment="TWILIO_ACCOUNT_SID=your_account_sid" # Ensure this is replaced with actual key
+Environment="TWILIO_AUTH_TOKEN=your_auth_token" # Ensure this is replaced with actual key
+Environment="TWILIO_FROM_NUMBER=your_twilio_number" # Ensure this is replaced with actual number
+Environment="BASE_URL=https://ajingolik.fun"
 
 [Install]
 WantedBy=multi-user.target
