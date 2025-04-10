@@ -29,38 +29,16 @@ sudo apt update && sudo apt upgrade -y
 
 log "Installing required packages (nginx, certbot, ufw, git, python3, nodejs, etc.)..."
 # Also install dos2unix to fix any potential CRLF issues.
-# Added mysql-server and expect for non-interactive setup
-sudo apt install -y nginx certbot python3-certbot-nginx ufw git python3 python3-pip python3-venv libyaml-dev nodejs dos2unix mysql-server expect
+# Removed mysql-server and expect from this list, will be installed manually
+sudo apt install -y nginx certbot python3-certbot-nginx ufw git python3 python3-pip python3-venv libyaml-dev nodejs dos2unix
 
 # Convert deploy.sh to Unix line endings (if needed)
 dos2unix deploy.sh
 
-# --- MySQL Setup ---
-log "Configuring MySQL Server..."
-# Skip attempting to set root password via debconf
-sudo apt install -y mysql-server # Ensure it's installed
+# --- MySQL Setup Removed ---
+# MySQL installation and user/database creation should be done manually BEFORE running this script.
+# --- End MySQL Setup Removed ---
 
-# Secure installation (optional but recommended) - This part is harder to automate non-interactively
-# sudo mysql_secure_installation
-
-# Create Application Database and User
-APP_DB_NAME="tfrtita_db"
-APP_DB_USER="tfrtita"
-APP_DB_PASSWORD="AFINasahbi@11" # Set the desired password directly here
-
-log "Creating MySQL database '${APP_DB_NAME}' and user '${APP_DB_USER}'..."
-
-# Use non-interactive MySQL commands via sudo, relying on socket authentication.
-# This avoids needing the MySQL root password explicitly, but might fail if socket auth is disabled or requires a password.
-sudo mysql -e "CREATE DATABASE IF NOT EXISTS ${APP_DB_NAME};"
-sudo mysql -e "CREATE USER IF NOT EXISTS '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';"
-# If the user already exists, update the password instead
-sudo mysql -e "ALTER USER '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';"
-sudo mysql -e "GRANT ALL PRIVILEGES ON ${APP_DB_NAME}.* TO '${APP_DB_USER}'@'localhost';"
-sudo mysql -e "FLUSH PRIVILEGES;"
-
-log "MySQL user and database setup attempted via sudo."
-# --- End MySQL Setup ---
 
 log "Configuring UFW firewall..."
 sudo ufw allow OpenSSH
