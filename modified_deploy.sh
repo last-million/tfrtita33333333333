@@ -49,7 +49,7 @@ sudo apt install -y mysql-server # Re-run install to apply debconf settings
 
 # Create Application Database and User
 APP_DB_NAME="tfrtita_db"
-APP_DB_USER="tfrtita_user"
+APP_DB_USER="tfrtita" # Changed from tfrtita_user to match .env
 APP_DB_PASSWORD="your_strong_mysql_password" # This MUST match the password in backend/.env
 
 log "Creating MySQL database '${APP_DB_NAME}' and user '${APP_DB_USER}'..."
