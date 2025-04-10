@@ -19,13 +19,18 @@ import audioop # For mulaw conversion
 logging.basicConfig(level=logging.INFO) # Basic config for root logger
 logger = logging.getLogger(__name__)
 
-# Import Ultravox client library (Trying direct import from package)
+# Import Ultravox client library (Trying attribute access)
+UltravoxClient = None # Initialize as None
 try:
-    from ultravox_client import Client as UltravoxClient
-    logger.info("Successfully imported UltravoxClient from ultravox_client")
+    import ultravox_client
+    try:
+        # Attempt to access Client as an attribute of the imported package
+        UltravoxClient = ultravox_client.Client
+        logger.info("Successfully imported UltravoxClient via attribute access")
+    except AttributeError:
+        logger.error("Failed to find 'Client' attribute in 'ultravox_client' package.")
 except ImportError as e:
-    logger.error(f"Failed to import UltravoxClient from ultravox_client: {e}. Check package installation and structure.")
-    UltravoxClient = None # Define as None if import fails
+    logger.error(f"Failed to import base 'ultravox_client' package: {e}. Check package installation.")
 
 
 app = FastAPI()
@@ -74,8 +79,7 @@ async def websocket_endpoint(websocket: WebSocket):
             # await uv_client.connect() # Or similar connection method if needed
             logger.info("UltravoxClient imported, ready for use (actual usage commented out).")
         else:
-            logger.error("UltravoxClient could not be imported. WebSocket cannot process audio.")
-            # Close connection if Ultravox is essential
+            logger.error("UltravoxClient could not be imported or found. WebSocket cannot process audio.")
             await websocket.close(code=1011, reason="Ultravox client unavailable")
             return
 
@@ -96,40 +100,44 @@ async def websocket_endpoint(websocket: WebSocket):
 
             elif event == "media":
                 payload = data.get('media', {}).get('payload')
-                if payload and uv_client: # Check if client is initialized
+                if payload: # Removed 'and uv_client' check for now as usage is commented
                     audio_chunk = base64.b64decode(payload)
                     logger.debug(f"Received audio chunk: {len(audio_chunk)} bytes for stream {stream_sid}")
 
-                    # --- Ultravox Interaction ---
-                    try:
-                        # 1. Convert Twilio's mulaw/8kHz to PCM/16kHz
-                        audio_segment = AudioSegment(data=audio_chunk, sample_width=1, frame_rate=8000, channels=1)
-                        pcm_segment = audio_segment.set_frame_rate(16000).set_sample_width(2)
-                        pcm_chunk = pcm_segment.raw_data
-
-                        # 2. Send to Ultravox
-                        # ultravox_response = await uv_client.streaming_process(pcm_chunk) # Replace with actual method
-                        ultravox_response = None # Placeholder
-
-                        # 3. Handle Ultravox response
-                        if ultravox_response and ultravox_response.audio:
-                            response_pcm_chunk = ultravox_response.audio
-                            # 4. Convert response PCM back to mulaw/8kHz for Twilio
-                            response_segment = AudioSegment(data=response_pcm_chunk, sample_width=2, frame_rate=16000, channels=1)
-                            twilio_segment = response_segment.set_frame_rate(8000).set_sample_width(1)
-                            mulaw_response_bytes = audioop.lin2ulaw(twilio_segment.raw_data, 1)
-                            # 5. Send audio back to Twilio
-                            response_payload = base64.b64encode(mulaw_response_bytes).decode('utf-8')
-                            await websocket.send_text(json.dumps({
-                                "event": "media",
-                                "streamSid": stream_sid,
-                                "media": {"payload": response_payload}
-                            }))
-                            logger.debug(f"Sent {len(mulaw_response_bytes)} bytes back to Twilio for stream {stream_sid}")
-
-                    except Exception as e:
-                        logger.error(f"Error processing audio chunk with Ultravox for {call_sid}: {e}")
+                    # --- Placeholder Ultravox Interaction ---
+                    # TODO: Implement actual audio processing and response generation
+                    # Ensure uv_client is properly initialized before uncommenting below
+                    # try:
+                    #     # 1. Convert Twilio's mulaw/8kHz to PCM/16kHz
+                    #     audio_segment = AudioSegment(data=audio_chunk, sample_width=1, frame_rate=8000, channels=1)
+                    #     pcm_segment = audio_segment.set_frame_rate(16000).set_sample_width(2)
+                    #     pcm_chunk = pcm_segment.raw_data
+                    #
+                    #     # 2. Send to Ultravox
+                    #     # async with uv_client: # Or however the client manages sessions
+                    #     #    ultravox_response = await uv_client.streaming_process(pcm_chunk) # Replace with actual method
+                    #     ultravox_response = None # Placeholder
+                    #
+                    #     # 3. Handle Ultravox response
+                    #     if ultravox_response and ultravox_response.audio:
+                    #         response_pcm_chunk = ultravox_response.audio
+                    #         # 4. Convert response PCM back to mulaw/8kHz for Twilio
+                    #         response_segment = AudioSegment(data=response_pcm_chunk, sample_width=2, frame_rate=16000, channels=1)
+                    #         twilio_segment = response_segment.set_frame_rate(8000).set_sample_width(1)
+                    #         mulaw_response_bytes = audioop.lin2ulaw(twilio_segment.raw_data, 1)
+                    #         # 5. Send audio back to Twilio
+                    #         response_payload = base64.b64encode(mulaw_response_bytes).decode('utf-8')
+                    #         await websocket.send_text(json.dumps({
+                    #             "event": "media",
+                    #             "streamSid": stream_sid,
+                    #             "media": {"payload": response_payload}
+                    #         }))
+                    #         logger.debug(f"Sent {len(mulaw_response_bytes)} bytes back to Twilio for stream {stream_sid}")
+                    #
+                    # except Exception as e:
+                    #     logger.error(f"Error processing audio chunk with Ultravox for {call_sid}: {e}")
                     # --- End Ultravox Interaction ---
+                    pass # Keep pass until TODO is implemented
 
             elif event == "mark":
                 logger.info(f"Received mark event: {data.get('mark')}")
