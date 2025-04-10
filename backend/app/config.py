@@ -8,7 +8,15 @@ class Settings(BaseSettings):
     google_client_id: str
     airtable_api_key: str = ""  # Default value if not provided in .env
     ultravox_api_key: str
-    database_url: str = "file:./data.db"  # LibSQL database URL
+    # database_url: str = "file:./data.db" # Removed, using specific DB vars now
+    base_url: str = "http://localhost:8000" # Added Base URL for callbacks, default to localhost
+
+    # MySQL specific settings (loaded from .env)
+    db_host: str
+    db_port: int
+    db_user: str
+    db_password: str
+    db_name: str
 
     class Config:
         env_file = ".env"
