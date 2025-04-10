@@ -29,10 +29,52 @@ sudo apt update && sudo apt upgrade -y
 
 log "Installing required packages (nginx, certbot, ufw, git, python3, nodejs, etc.)..."
 # Also install dos2unix to fix any potential CRLF issues.
-sudo apt install -y nginx certbot python3-certbot-nginx ufw git python3 python3-pip python3-venv libyaml-dev nodejs dos2unix
+# Added mysql-server and expect for non-interactive setup
+sudo apt install -y nginx certbot python3-certbot-nginx ufw git python3 python3-pip python3-venv libyaml-dev nodejs dos2unix mysql-server expect
 
 # Convert deploy.sh to Unix line endings (if needed)
 dos2unix deploy.sh
+
+# --- MySQL Setup ---
+log "Configuring MySQL Server..."
+# Set a default root password non-interactively (adjust password as needed)
+# Note: Consider a more secure method for production, like manual setup or config management tools
+MYSQL_ROOT_PASSWORD="your_secure_mysql_root_password" # CHANGE THIS!
+sudo debconf-set-selections <<< "mysql-server mysql-server/root_password password ${MYSQL_ROOT_PASSWORD}"
+sudo debconf-set-selections <<< "mysql-server mysql-server/root_password_again password ${MYSQL_ROOT_PASSWORD}"
+sudo apt install -y mysql-server # Re-run install to apply debconf settings
+
+# Secure installation (optional but recommended) - This part is harder to automate non-interactively
+# sudo mysql_secure_installation
+
+# Create Application Database and User
+APP_DB_NAME="tfrtita_db"
+APP_DB_USER="tfrtita_user"
+APP_DB_PASSWORD="your_strong_mysql_password" # This MUST match the password in backend/.env
+
+log "Creating MySQL database '${APP_DB_NAME}' and user '${APP_DB_USER}'..."
+# Use expect to automate the MySQL prompt interaction
+EXPECT_SCRIPT=$(cat <<EOF
+spawn mysql -u root -p
+expect "Enter password:"
+send "${MYSQL_ROOT_PASSWORD}\r"
+expect "mysql>"
+send "CREATE DATABASE IF NOT EXISTS ${APP_DB_NAME};\r"
+expect "mysql>"
+send "CREATE USER IF NOT EXISTS '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';\r"
+expect "mysql>"
+send "GRANT ALL PRIVILEGES ON ${APP_DB_NAME}.* TO '${APP_DB_USER}'@'localhost';\r"
+expect "mysql>"
+send "FLUSH PRIVILEGES;\r"
+expect "mysql>"
+send "EXIT;\r"
+expect eof
+EOF
+)
+expect -c "$EXPECT_SCRIPT"
+
+log "MySQL setup complete."
+# --- End MySQL Setup ---
 
 log "Configuring UFW firewall..."
 sudo ufw allow OpenSSH
@@ -95,9 +137,10 @@ cd "${BACKEND_DIR}"
 pip install -r "${BACKEND_DIR}/requirements.txt"
 
 log "Initializing database (creating tables)..."
-# Run the database module. Ensure that your database module (database.py)
-# uses a concrete client implementation from libsql_client.
-python3 -m app.database || log "Database initialization failed; please check your logs."
+# This now connects to MySQL and creates tables using the mysql.connector setup
+# Ensure MySQL service is running before this step (systemd usually handles this)
+sudo systemctl status mysql.service # Optional: check status
+python3 -m app.database || log "Database initialization failed; please check MySQL logs (/var/log/mysql/error.log) and app logs."
 
 # -----------------------------------------------------------
 # II.B. FRONTEND SETUP
