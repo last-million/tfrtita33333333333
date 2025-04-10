@@ -37,12 +37,8 @@ dos2unix deploy.sh
 
 # --- MySQL Setup ---
 log "Configuring MySQL Server..."
-# Set a default root password non-interactively (adjust password as needed)
-# Note: Consider a more secure method for production, like manual setup or config management tools
-MYSQL_ROOT_PASSWORD="AFINasahbi@11" # CHANGE THIS!
-sudo debconf-set-selections <<< "mysql-server mysql-server/root_password password ${MYSQL_ROOT_PASSWORD}"
-sudo debconf-set-selections <<< "mysql-server mysql-server/root_password_again password ${MYSQL_ROOT_PASSWORD}"
-sudo apt install -y mysql-server # Re-run install to apply debconf settings
+# Skip attempting to set root password via debconf
+sudo apt install -y mysql-server # Ensure it's installed
 
 # Secure installation (optional but recommended) - This part is harder to automate non-interactively
 # sudo mysql_secure_installation
@@ -54,16 +50,16 @@ APP_DB_PASSWORD="AFINasahbi@11" # Set the desired password directly here
 
 log "Creating MySQL database '${APP_DB_NAME}' and user '${APP_DB_USER}'..."
 
-# Use non-interactive MySQL commands
-# Note: Ensure MYSQL_ROOT_PASSWORD is set correctly above
-sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS ${APP_DB_NAME};"
-sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE USER IF NOT EXISTS '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';"
+# Use non-interactive MySQL commands via sudo, relying on socket authentication.
+# This avoids needing the MySQL root password explicitly, but might fail if socket auth is disabled or requires a password.
+sudo mysql -e "CREATE DATABASE IF NOT EXISTS ${APP_DB_NAME};"
+sudo mysql -e "CREATE USER IF NOT EXISTS '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';"
 # If the user already exists, update the password instead
-sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "ALTER USER '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';"
-sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${APP_DB_NAME}.* TO '${APP_DB_USER}'@'localhost';"
-sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;"
+sudo mysql -e "ALTER USER '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';"
+sudo mysql -e "GRANT ALL PRIVILEGES ON ${APP_DB_NAME}.* TO '${APP_DB_USER}'@'localhost';"
+sudo mysql -e "FLUSH PRIVILEGES;"
 
-log "MySQL user and database setup complete."
+log "MySQL user and database setup attempted via sudo."
 # --- End MySQL Setup ---
 
 log "Configuring UFW firewall..."
