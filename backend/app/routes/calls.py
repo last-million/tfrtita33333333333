@@ -258,14 +258,83 @@ async def incoming_call(request: Request):
         twiml.say("An application error occurred. Please try again later.")
         return Response(content=str(twiml), media_type="application/xml", status_code=500)
 
-# TODO: Add webhook endpoint for call status updates from Twilio
-# @router.post("/call-status")
-# async def call_status(request: Request):
-#     form_data = await request.form()
-#     status_data = dict(form_data)
-#     logger.info(f"Call status update: {status_data}")
-#     # Update call log in database based on status_data (CallSid, CallStatus, Duration, etc.)
-#     return Response(status_code=200)
+# Webhook endpoint for call status updates from Twilio
+@router.post("/call-status")
+async def call_status_update(request: Request):
+    """
+    Receive call status updates from Twilio and update the database.
+    """
+    conn = None
+    cursor = None
+    try:
+        form_data = await request.form()
+        status_data = dict(form_data)
+        logger.info(f"Received call status update: {status_data}")
+
+        call_sid = status_data.get('CallSid')
+        call_status = status_data.get('CallStatus')
+        duration = status_data.get('CallDuration')
+        recording_url = status_data.get('RecordingUrl')
+        # Add other fields as needed: RecordingDuration, Timestamp, etc.
+
+        if not call_sid:
+            logger.error("CallSid missing in status update")
+            # Return 200 OK anyway so Twilio doesn't retry excessively
+            return Response(status_code=200)
+
+        conn = get_db_connection()
+        if conn is None:
+            logger.error(f"Database connection unavailable for call status update: {call_sid}")
+            # Return 503 Service Unavailable? Or 200? Twilio prefers 200.
+            return Response(status_code=200)
+
+        cursor = conn.cursor()
+
+        # Construct update query dynamically based on available data
+        update_fields = []
+        params = []
+        if call_status:
+            update_fields.append("status = %s")
+            params.append(call_status)
+        if duration:
+            update_fields.append("duration = %s")
+            params.append(int(duration)) # Ensure duration is integer
+        if recording_url:
+            update_fields.append("recording_url = %s")
+            params.append(recording_url)
+        # Add end_time based on status if applicable
+        if call_status in ['completed', 'failed', 'busy', 'no-answer', 'canceled']:
+             update_fields.append("end_time = %s")
+             params.append(datetime.utcnow()) # Use current time as end time
+
+        if not update_fields:
+            logger.info(f"No fields to update for CallSid: {call_sid}")
+            return Response(status_code=200)
+
+        params.append(call_sid) # For the WHERE clause
+        sql = f"UPDATE call_logs SET {', '.join(update_fields)} WHERE call_sid = %s"
+
+        logger.info(f"Executing SQL: {sql} with params: {params}")
+        cursor.execute(sql, tuple(params))
+        conn.commit()
+        logger.info(f"Call log updated for CallSid: {call_sid}")
+
+        return Response(status_code=200)
+
+    except DBError as e:
+        logger.error(f"Database error updating call status for {call_sid}: {e}")
+        # Return 200 OK to prevent Twilio retries
+        return Response(status_code=200)
+    except Exception as e:
+        logger.error(f"Unexpected error handling call status update for {call_sid}: {e}")
+        # Return 200 OK to prevent Twilio retries
+        return Response(status_code=200)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
 
 # TODO: Add WebSocket endpoint for /media-stream
 # This would typically be handled by a separate WebSocket framework integration
