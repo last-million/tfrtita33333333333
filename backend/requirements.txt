@@ -1,6 +1,7 @@
 # Existing requirements
 fastapi==0.100.0
 uvicorn==0.23.1
+gunicorn # Added Gunicorn for deployment
 python-multipart==0.0.6
 
 # Google and OAuth
@@ -26,7 +27,5 @@ twilio
 # Pydantic Settings (this will install Pydantic v2.x)
 pydantic-settings
 
-# LibSQLlibsql_client==0.3.1
-
-
-libsql_client==0.3.1
+# LibSQL
+libsql_client==0.3.1 # Removed duplicate entry
