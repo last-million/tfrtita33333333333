@@ -210,7 +210,8 @@ while pgrep -x certbot >/dev/null; do
 done
 
 log "Obtaining SSL certificate via Certbot..."
-sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email ${EMAIL}
+# Added --expand flag to handle existing certificates
+sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email ${EMAIL} --expand
 
 # -----------------------------------------------------------
 # VI. FINAL RESTART OF SERVICES
