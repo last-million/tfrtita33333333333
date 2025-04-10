@@ -49,31 +49,21 @@ sudo apt install -y mysql-server # Re-run install to apply debconf settings
 
 # Create Application Database and User
 APP_DB_NAME="tfrtita_db"
-APP_DB_USER="tfrtita" # Changed from tfrtita_user to match .env
-APP_DB_PASSWORD="your_strong_mysql_password" # This MUST match the password in backend/.env
+APP_DB_USER="tfrtita"
+APP_DB_PASSWORD="AFINasahbi@11" # Set the desired password directly here
 
 log "Creating MySQL database '${APP_DB_NAME}' and user '${APP_DB_USER}'..."
-# Use expect to automate the MySQL prompt interaction
-EXPECT_SCRIPT=$(cat <<EOF
-spawn mysql -u root -p
-expect "Enter password:"
-send "${MYSQL_ROOT_PASSWORD}\r"
-expect "mysql>"
-send "CREATE DATABASE IF NOT EXISTS ${APP_DB_NAME};\r"
-expect "mysql>"
-send "CREATE USER IF NOT EXISTS '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';\r"
-expect "mysql>"
-send "GRANT ALL PRIVILEGES ON ${APP_DB_NAME}.* TO '${APP_DB_USER}'@'localhost';\r"
-expect "mysql>"
-send "FLUSH PRIVILEGES;\r"
-expect "mysql>"
-send "EXIT;\r"
-expect eof
-EOF
-)
-expect -c "$EXPECT_SCRIPT"
 
-log "MySQL setup complete."
+# Use non-interactive MySQL commands
+# Note: Ensure MYSQL_ROOT_PASSWORD is set correctly above
+sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS ${APP_DB_NAME};"
+sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE USER IF NOT EXISTS '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';"
+# If the user already exists, update the password instead
+sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "ALTER USER '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';"
+sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${APP_DB_NAME}.* TO '${APP_DB_USER}'@'localhost';"
+sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;"
+
+log "MySQL user and database setup complete."
 # --- End MySQL Setup ---
 
 log "Configuring UFW firewall..."
