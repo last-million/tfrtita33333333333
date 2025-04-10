@@ -19,18 +19,19 @@ import audioop # For mulaw conversion
 logging.basicConfig(level=logging.INFO) # Basic config for root logger
 logger = logging.getLogger(__name__)
 
-# Import Ultravox client library (Trying attribute access)
+# Import Ultravox client library (Trying 'ultravox' package name based on docs)
 UltravoxClient = None # Initialize as None
 try:
-    import ultravox_client
-    try:
-        # Attempt to access Client as an attribute of the imported package
-        UltravoxClient = ultravox_client.Client
-        logger.info("Successfully imported UltravoxClient via attribute access")
-    except AttributeError:
-        logger.error("Failed to find 'Client' attribute in 'ultravox_client' package.")
+    from ultravox import Client as UltravoxClient
+    logger.info("Successfully imported UltravoxClient from ultravox")
 except ImportError as e:
-    logger.error(f"Failed to import base 'ultravox_client' package: {e}. Check package installation.")
+    logger.error(f"Failed to import Client from ultravox: {e}. Trying ultravox_client next.")
+    try:
+        # Fallback to previous attempt just in case
+        from ultravox_client import Client as UltravoxClient
+        logger.info("Successfully imported UltravoxClient from ultravox_client")
+    except ImportError as e2:
+         logger.error(f"Failed to import Client from ultravox_client either: {e2}. Check package installation.")
 
 
 app = FastAPI()
