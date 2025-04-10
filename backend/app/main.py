@@ -19,13 +19,13 @@ import audioop # For mulaw conversion
 logging.basicConfig(level=logging.INFO) # Basic config for root logger
 logger = logging.getLogger(__name__)
 
-# Print sys.path right before the import that fails
-# logger.info(f"Python sys.path: {sys.path}") # Keep commented out for now
-
-# Import Ultravox client library (Corrected import path again)
-# import ultravox_client # Trying base import
-# from ultravox_client import Client as UltravoxClient # Import Client directly from the package - This caused ImportError
-# Let's assume the service handles the client for now, or comment out usage below
+# Import Ultravox client library (Trying direct import from package)
+try:
+    from ultravox_client import Client as UltravoxClient
+    logger.info("Successfully imported UltravoxClient from ultravox_client")
+except ImportError as e:
+    logger.error(f"Failed to import UltravoxClient from ultravox_client: {e}. Check package installation and structure.")
+    UltravoxClient = None # Define as None if import fails
 
 
 app = FastAPI()
@@ -63,15 +63,25 @@ async def websocket_endpoint(websocket: WebSocket):
     call_sid = None
     caller_number = None
     stream_sid = None # Twilio sends a streamSid in the 'start' message
-
-    # Placeholder for Ultravox client instance if needed outside the loop
-    # uv_client_instance = None
+    uv_client = None # Initialize client variable
 
     try:
+        # Initialize Ultravox client here if the import succeeded
+        if UltravoxClient:
+            # Assuming synchronous context manager or direct instantiation is needed
+            # Adjust based on actual ultravox-client library usage
+            # uv_client = UltravoxClient(api_key=settings.ultravox_api_key)
+            # await uv_client.connect() # Or similar connection method if needed
+            logger.info("UltravoxClient imported, ready for use (actual usage commented out).")
+        else:
+            logger.error("UltravoxClient could not be imported. WebSocket cannot process audio.")
+            # Close connection if Ultravox is essential
+            await websocket.close(code=1011, reason="Ultravox client unavailable")
+            return
+
         while True:
             message = await websocket.receive_text()
             data = json.loads(message)
-
             event = data.get('event')
 
             if event == "connected":
@@ -79,27 +89,47 @@ async def websocket_endpoint(websocket: WebSocket):
 
             elif event == "start":
                 stream_sid = data.get('streamSid')
-                # Extract parameters passed from TwiML
                 call_sid = data.get('start', {}).get('customParameters', {}).get('callSid')
                 caller_number = data.get('start', {}).get('customParameters', {}).get('callerNumber')
                 logger.info(f"Media stream started: streamSid={stream_sid}, callSid={call_sid}, caller={caller_number}")
-                # TODO: Initialize Ultravox client session here if needed
+                # TODO: Potentially log stream start or update call log
 
             elif event == "media":
-                # Process incoming audio chunk
                 payload = data.get('media', {}).get('payload')
-                if payload:
+                if payload and uv_client: # Check if client is initialized
                     audio_chunk = base64.b64decode(payload)
                     logger.debug(f"Received audio chunk: {len(audio_chunk)} bytes for stream {stream_sid}")
 
-                    # --- Placeholder Ultravox Interaction ---
-                    # TODO: Implement actual audio processing and response generation
-                    # 1. Convert audio_chunk (mulaw) to PCM
-                    # 2. Send pcm_chunk to Ultravox service/client
-                    # 3. Receive response_pcm_chunk from Ultravox
-                    # 4. Convert response_pcm_chunk back to mulaw
-                    # 5. Send mulaw_response_bytes back to Twilio via WebSocket
-                    pass # Remove this pass when implementing
+                    # --- Ultravox Interaction ---
+                    try:
+                        # 1. Convert Twilio's mulaw/8kHz to PCM/16kHz
+                        audio_segment = AudioSegment(data=audio_chunk, sample_width=1, frame_rate=8000, channels=1)
+                        pcm_segment = audio_segment.set_frame_rate(16000).set_sample_width(2)
+                        pcm_chunk = pcm_segment.raw_data
+
+                        # 2. Send to Ultravox
+                        # ultravox_response = await uv_client.streaming_process(pcm_chunk) # Replace with actual method
+                        ultravox_response = None # Placeholder
+
+                        # 3. Handle Ultravox response
+                        if ultravox_response and ultravox_response.audio:
+                            response_pcm_chunk = ultravox_response.audio
+                            # 4. Convert response PCM back to mulaw/8kHz for Twilio
+                            response_segment = AudioSegment(data=response_pcm_chunk, sample_width=2, frame_rate=16000, channels=1)
+                            twilio_segment = response_segment.set_frame_rate(8000).set_sample_width(1)
+                            mulaw_response_bytes = audioop.lin2ulaw(twilio_segment.raw_data, 1)
+                            # 5. Send audio back to Twilio
+                            response_payload = base64.b64encode(mulaw_response_bytes).decode('utf-8')
+                            await websocket.send_text(json.dumps({
+                                "event": "media",
+                                "streamSid": stream_sid,
+                                "media": {"payload": response_payload}
+                            }))
+                            logger.debug(f"Sent {len(mulaw_response_bytes)} bytes back to Twilio for stream {stream_sid}")
+
+                    except Exception as e:
+                        logger.error(f"Error processing audio chunk with Ultravox for {call_sid}: {e}")
+                    # --- End Ultravox Interaction ---
 
             elif event == "mark":
                 logger.info(f"Received mark event: {data.get('mark')}")
@@ -107,23 +137,21 @@ async def websocket_endpoint(websocket: WebSocket):
             elif event == "stop":
                 logger.info(f"Media stream stopped: {data}")
                 # TODO: Clean up Ultravox client session if needed
-                break # Exit loop on stop event
+                break
 
             else:
                 logger.warning(f"Received unknown WebSocket event: {event}")
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected: streamSid={stream_sid}, callSid={call_sid}")
-        # TODO: Handle disconnection, maybe update call log status if needed
     except Exception as e:
         logger.error(f"WebSocket error: {e} (streamSid={stream_sid}, callSid={call_sid})")
         try:
-            await websocket.close(code=1011) # Internal Error
-        except RuntimeError:
-            pass # Already closed
+            await websocket.close(code=1011)
+        except RuntimeError: pass
     finally:
         logger.info(f"Closing WebSocket handler for streamSid={stream_sid}, callSid={call_sid}")
-        # TODO: Ensure any Ultravox resources are cleaned up
+        # TODO: Ensure any Ultravox resources (like uv_client) are properly closed if necessary
 
 # --- Ultravox Webhook ---
 @app.post("/ultravox-webhook")
@@ -136,7 +164,7 @@ async def ultravox_webhook_handler(request: Request):
     cursor = None
     payload = {}
     try:
-        # TODO: Implement webhook signature verification (HMAC-SHA256) for security
+        # TODO: Implement webhook signature verification
 
         payload = await request.json()
         event_type = payload.get('event')
