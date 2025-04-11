@@ -111,10 +111,15 @@ async def vectorize_documents(
         for file_path in files:
             # Detect file type and extract content
             content = vectorization_service.extract_content(file_path)
-            
-            # Generate vector
-            vector = vectorization_service.vectorize(content)
-            
+
+            # Generate vector (using await for the async method)
+            logger.info(f"Generating vector for {file_path}...")
+            vector = await vectorization_service.vectorize(content)
+            logger.info(f"Vector generated for {file_path}, length: {len(vector) if vector else 'N/A'}")
+
+            if not vector:
+                 raise ValueError(f"Failed to generate vector for {file_path}")
+
             # Store in Supabase
             result = supabase_service.store_vector(
                 supabase_table, 
