@@ -47,7 +47,26 @@ export const api = {
   supabase: {
     listTables: () => axiosInstance.get('/supabase/tables'),
     vectorize: (files, table) => axiosInstance.post('/vectorize', { files, table })
+  },
+
+  // Call API methods (Added)
+  calls: {
+    initiateSingle: (toNumber, fromNumber) => axiosInstance.post('/calls/initiate', { to_number: toNumber, from_number: fromNumber }),
+    initiateBulk: (phoneNumbers) => axiosInstance.post('/calls/bulk', { phone_numbers: phoneNumbers }),
+    getHistory: (page = 1, limit = 50, status = null, direction = null) => {
+      const params = { page, limit };
+      if (status) params.status = status;
+      if (direction) params.direction = direction;
+      return axiosInstance.get('/calls/history', { params });
+    }
+    // Add other call-related API calls here if needed
   }
 }
 
-export default api
+// Export named functions for easier import in components
+export const initiateSingleCall = api.calls.initiateSingle;
+export const initiateBulkCall = api.calls.initiateBulk;
+export const getCallHistory = api.calls.getHistory;
+// Add other exports as needed
+
+export default api; // Keep default export if other parts rely on it
