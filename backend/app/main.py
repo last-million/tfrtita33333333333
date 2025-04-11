@@ -18,14 +18,8 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Import UltravoxSession based on documentation
-UltravoxSession = None
-try:
-    from ultravox_client import UltravoxSession # Correct class name based on docs
-    logger.info("Successfully imported UltravoxSession from ultravox_client")
-except ImportError as e:
-    logger.error(f"Failed to import UltravoxSession from ultravox_client: {e}. Check package installation.")
-
+# Removed UltravoxSession import attempts as they consistently failed
+# We will use websockets.connect directly as per the example project
 
 app = FastAPI()
 
@@ -81,7 +75,7 @@ async def create_ultravox_call(system_prompt: str, first_message: str) -> str:
                 "clientBufferSizeMs": 60
             }
         }
-        # "call_ended_webhook_url": f"{settings.base_url}/ultravox-webhook" # Removed invalid parameter based on API error
+        # "call_ended_webhook_url": f"{settings.base_url}/ultravox-webhook" # Removed invalid parameter
     }
     logger.info(f"Creating Ultravox call with payload: {json.dumps(payload, indent=2)}")
     try:
@@ -110,11 +104,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
     call_sid = None
     stream_sid = None
-    uv_ws = None
+    uv_ws = None # WebSocket connection to Ultravox
     session = None
     twilio_task = None
     uv_task = None
-    uv_session = None # Variable for the UltravoxSession instance
 
     async def handle_ultravox_messages():
         nonlocal uv_ws, stream_sid, call_sid, session
@@ -122,6 +115,7 @@ async def websocket_endpoint(websocket: WebSocket):
             async for raw_message in uv_ws:
                 if isinstance(raw_message, bytes):
                     try:
+                        # Agent audio in PCM s16le -> convert to mulaw for Twilio
                         mu_law_bytes = audioop.lin2ulaw(raw_message, 2)
                         payload_base64 = base64.b64encode(mu_law_bytes).decode('ascii')
                         await websocket.send_text(json.dumps({
@@ -133,6 +127,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     except Exception as e:
                         logger.error(f"Error transcoding/sending Ultravox audio: {e}")
                 else:
+                    # Text data message from Ultravox
                     try:
                         msg_data = json.loads(raw_message)
                         msg_type = msg_data.get("type") or msg_data.get("eventType")
@@ -153,7 +148,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                  "error_type": "not-implemented",
                                  "error_message": f"Tool '{toolName}' is not implemented."
                              }
-                             await uv_ws.send(json.dumps(error_result))
+                             await uv_ws.send(json.dumps(error_result)) # Send back via uv_ws
                         else:
                             logger.info(f"Received Ultravox message: {msg_type} - {msg_data}")
                     except Exception as e:
@@ -168,7 +163,7 @@ async def websocket_endpoint(websocket: WebSocket):
                  await websocket.close(code=1011, reason="Ultravox connection closed")
 
     async def handle_twilio_messages():
-        nonlocal call_sid, session, stream_sid, uv_ws, uv_task, uv_session
+        nonlocal call_sid, session, stream_sid, uv_ws, uv_task
         try:
             while True:
                 message = await websocket.receive_text()
@@ -208,17 +203,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         return
 
                     try:
-                        # Initialize and connect Ultravox Session if import succeeded
-                        if UltravoxSession:
-                             # Use the imported Session class
-                             uv_session = UltravoxSession(api_key=settings.ultravox_api_key) # Assuming API key needed
-                             uv_ws = await uv_session.connect(uv_join_url) # Assuming connect method exists
-                             logger.info(f"Ultravox WebSocket connected via Session for CallSid {call_sid}.")
-                             uv_task = asyncio.create_task(handle_ultravox_messages()) # Start listener
-                        else:
-                             logger.error("UltravoxSession class not available. Cannot connect.")
-                             await websocket.close(code=1011, reason="Ultravox client unavailable")
-                             return
+                        # Connect directly using websockets library
+                        uv_ws = await websockets.connect(uv_join_url)
+                        logger.info(f"Ultravox WebSocket connected via websockets.connect for CallSid {call_sid}.")
+                        uv_task = asyncio.create_task(handle_ultravox_messages()) # Start listener
 
                     except Exception as e:
                         logger.error(f"Error connecting/starting Ultravox WebSocket for CallSid {call_sid}: {e}", exc_info=True)
@@ -229,13 +217,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     payload_base64 = data['media']['payload']
                     if uv_ws and uv_ws.state == websockets.protocol.State.OPEN:
                         try:
+                            # Decode base64 to get raw µ-law bytes
                             mu_law_bytes = base64.b64decode(payload_base64)
+                            # Transcode µ-law to PCM (s16le)
                             pcm_bytes = audioop.ulaw2lin(mu_law_bytes, 2)
-                            # Use the uv_session object if it exists and has a send method
-                            if uv_session and hasattr(uv_session, 'send_audio'):
-                                await uv_session.send_audio(pcm_bytes) # Assuming send_audio method
-                            else:
-                                await uv_ws.send(pcm_bytes) # Fallback to direct websocket send
+                            # Send PCM bytes to Ultravox
+                            await uv_ws.send(pcm_bytes)
                             logger.debug(f"Sent {len(pcm_bytes)} PCM bytes to Ultravox for CallSid={call_sid}")
                         except Exception as e:
                             logger.error(f"Error transcoding/sending Twilio audio to Ultravox for CallSid={call_sid}: {e}")
@@ -260,8 +247,7 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.info(f"Twilio message handler finished for CallSid={call_sid}.")
             if uv_task and not uv_task.done(): uv_task.cancel()
             if uv_ws and uv_ws.state == websockets.protocol.State.OPEN: await uv_ws.close()
-            if uv_session and hasattr(uv_session, 'close'): # If using the Session class approach
-                 await uv_session.close() # Assuming a close method
+            # Removed uv_session close
             if call_sid and call_sid in sessions:
                 del sessions[call_sid]
                 logger.info(f"Removed session data for CallSid={call_sid}")
