@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react'
-import './CallManager.css'
-import ServiceConnectionManager from '../services/ServiceConnectionManager'
+import React, { useState, useEffect } from 'react';
+import './CallManager.css';
+import ServiceConnectionManager from '../services/ServiceConnectionManager';
 import { useLanguage } from '../context/LanguageContext';
 import translations from '../translations';
+// Assuming an API service exists like this:
+import { initiateBulkCall, initiateSingleCall } from '../services/api'; // Adjust path if needed
 
 function CallManager() {
   const [phoneNumbers, setPhoneNumbers] = useState('')
@@ -65,12 +67,38 @@ function CallManager() {
     setWebhookUrl(`https://${serverDomain}/api/incoming-call`);
   }, []);
 
-  const handleBulkCall = () => {
-    const numbers = phoneNumbers.split('\n').filter(num => num.trim() !== '')
-    console.log('Initiating calls:', numbers)
-    // Implement actual call initiation logic
-    alert(`Initiating ${callType} calls to ${numbers.length} numbers`)
-  }
+  const handleBulkCall = async () => { // Make async
+    const numbers = phoneNumbers.split('\n').filter(num => num.trim() !== '');
+    if (numbers.length === 0) {
+      alert('Please enter at least one phone number.');
+      return;
+    }
+    console.log('Initiating calls:', numbers);
+
+    // Get the configured 'From' number (assuming it's stored or default)
+    // TODO: Need a way to get/select the 'From' number in the UI or config
+    const fromNumber = "+12762761877"; // Replace with actual logic/config
+
+    try {
+      let response;
+      if (numbers.length === 1) {
+        // Use single call endpoint if only one number
+        response = await initiateSingleCall(numbers[0], fromNumber); // Use API service function
+        alert(`Call initiated to ${numbers[0]}. SID: ${response.call_sid}`);
+      } else {
+        // Use bulk call endpoint
+        response = await initiateBulkCall(numbers); // Use API service function
+        alert(`Initiating bulk calls to ${numbers.length} numbers. Check logs for details.`);
+        // Optionally display results from response.results
+      }
+      console.log('API Response:', response);
+      // Clear the text area after successful initiation
+      setPhoneNumbers('');
+    } catch (error) {
+      console.error('Error initiating call(s):', error);
+      alert(`Error initiating call(s): ${error.message || error}`);
+    }
+  };
 
   const handleOpenAddClientModal = () => {
     setShowAddClientModal(true);
