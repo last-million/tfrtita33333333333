@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from typing import Optional # Import Optional
 
 class Settings(BaseSettings):
     twilio_account_sid: str
