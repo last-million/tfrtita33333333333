@@ -18,20 +18,13 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Import Ultravox Session class (Trying direct import from package)
+# Import UltravoxSession based on documentation
 UltravoxSession = None
 try:
-    # Assuming Session might be defined in ultravox_client/__init__.py
-    from ultravox_client import Session as UltravoxSession
-    logger.info("Successfully imported Session from ultravox_client")
+    from ultravox_client import UltravoxSession # Correct class name based on docs
+    logger.info("Successfully imported UltravoxSession from ultravox_client")
 except ImportError as e:
-    logger.error(f"Failed to import Session directly from ultravox_client: {e}. Trying 'Client' next.")
-    try:
-        # Fallback: Try importing 'Client' directly
-        from ultravox_client import Client as UltravoxSession # Use Client but assign to UltravoxSession
-        logger.info("Successfully imported Client as UltravoxSession from ultravox_client")
-    except ImportError as e2:
-        logger.error(f"Failed to import Client or Session from ultravox_client: {e2}. Check package structure.")
+    logger.error(f"Failed to import UltravoxSession from ultravox_client: {e}. Check package installation.")
 
 
 app = FastAPI()
