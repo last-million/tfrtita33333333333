@@ -49,40 +49,38 @@ class Client(BaseModel):
     email: Optional[str] = None
     address: Optional[str] = None
 
-# Instantiate Twilio Service
-twilio_service = TwilioService()
+class InitiateCallRequest(BaseModel):
+    to_number: str
+    from_number: str
 
 # Instantiate Twilio Service
 twilio_service = TwilioService() # Moved instantiation outside function
 
 @router.post("/initiate")
-async def initiate_single_call(to_number: str, from_number: str):
+async def initiate_single_call(call_request: InitiateCallRequest): # Changed to accept Pydantic model
     """
-    Initiate an outbound call via Twilio.
+    Initiate an outbound call via Twilio. Accepts JSON body.
     """
     try:
-        # URL for Twilio to fetch TwiML instructions when the call connects
-        # This should point to an endpoint that returns TwiML, e.g., connecting to the media stream
-        # For now, using a placeholder TwiML URL - THIS NEEDS TO BE IMPLEMENTED
         # Ensure from_number is provided or use default from settings
-        effective_from_number = from_number or settings.twilio_from_number
+        effective_from_number = call_request.from_number or settings.twilio_from_number
         if not effective_from_number:
              raise HTTPException(status_code=400, detail="Missing 'from_number' and no default configured.")
 
-        twiml_url = f"{settings.base_url}/api/calls/outbound-twiml/{to_number}" # Example URL structure
+        twiml_url = f"{settings.base_url}/api/calls/outbound-twiml/{call_request.to_number}" # Example URL structure
 
-        logger.info(f"Attempting to initiate call via TwilioService to {to_number} from {effective_from_number}...")
-        call = twilio_service.make_call(to_number=to_number, from_number=effective_from_number, url=twiml_url)
+        logger.info(f"Attempting to initiate call via TwilioService to {call_request.to_number} from {effective_from_number}...")
+        call = twilio_service.make_call(to_number=call_request.to_number, from_number=effective_from_number, url=twiml_url)
         # Log SID immediately after successful API call
         logger.info(f"Twilio call object created with SID: {call.sid}")
         return {
             "status": "call_initiated",
             "call_sid": call.sid,
-            "to": to_number,
-            "from": from_number
+            "to": call_request.to_number,
+            "from": effective_from_number # Return the number actually used
         }
     except Exception as e:
-        logger.error(f"Failed to initiate call to {to_number}: {e}")
+        logger.error(f"Failed to initiate call to {call_request.to_number}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to initiate call: {e}")
 
 @router.post("/outbound-twiml/{call_to_number}")
