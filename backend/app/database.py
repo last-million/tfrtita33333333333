@@ -101,6 +101,20 @@ def create_tables():
             );
             """
         )
+        logger.info("Creating table: clients")
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS clients (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                phone_number VARCHAR(50) UNIQUE,
+                email VARCHAR(255) NULL,
+                address TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            );
+            """
+        )
         conn.commit()
         logger.info("Tables checked/created successfully.")
     except Error as e:
