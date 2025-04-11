@@ -81,8 +81,8 @@ async def create_ultravox_call(system_prompt: str, first_message: str) -> str:
                 "outputSampleRate": 8000, # Match Twilio
                 "clientBufferSizeMs": 60
             }
-        },
-        "call_ended_webhook_url": f"{settings.base_url}/ultravox-webhook"
+        }
+        # "call_ended_webhook_url": f"{settings.base_url}/ultravox-webhook" # Removed invalid parameter based on API error
     }
     logger.info(f"Creating Ultravox call with payload: {json.dumps(payload, indent=2)}")
     try:
