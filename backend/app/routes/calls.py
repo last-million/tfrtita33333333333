@@ -272,7 +272,40 @@ def get_call_history(
 
 # --- Client CRUD Operations ---
 
-# TODO: Add GET endpoint to list clients with pagination
+@router.get("/clients", response_model=List[Client])
+def list_clients(
+    page: int = 1,
+    limit: int = 100 # Default to fetching more clients for UI
+):
+    """
+    Retrieve a paginated list of clients from the database.
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            raise HTTPException(status_code=503, detail="Database connection unavailable.")
+        cursor = conn.cursor(dictionary=True)
+
+        offset = (page - 1) * limit
+        sql = "SELECT * FROM clients ORDER BY name ASC LIMIT %s OFFSET %s"
+        cursor.execute(sql, (limit, offset))
+        rows = cursor.fetchall()
+
+        # TODO: Add total count for proper pagination if needed by frontend
+        return [Client(**row) for row in rows]
+
+    except DBError as e:
+        logger.error(f"Database error listing clients: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error listing clients: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
 
 @router.post("/clients/import", response_model=ClientImportResponse)
 async def import_clients(clients: List[ClientCreate]): # Use ClientCreate model
