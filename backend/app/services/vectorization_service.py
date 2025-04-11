@@ -1,13 +1,18 @@
 import os
 import magic
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer # Removed local model
+from .openai_service import get_embedding # Import OpenAI embedding function
 import PyPDF2
 import docx
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 
 class VectorizationService:
-    def __init__(self):
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+    # Removed __init__ as local model is no longer needed
+    # def __init__(self):
+    #     self.model = SentenceTransformer('all-MiniLM-L6-v2')
 
     def detect_file_type(self, file_path):
         """
@@ -35,9 +40,7 @@ class VectorizationService:
             else:
                 raise ValueError(f"Unsupported file type: {file_type}")
         except Exception as e:
-            raise ValueError(f"Content extraction failed: {str(e)}")
-
-    def _extract_pdf(self, file_path):
+            raise ValueError(f"Content extraction failed: {str(e)}") from e
         """
         Extract text from PDF files
         """
@@ -59,15 +62,22 @@ class VectorizationService:
         """
         Extract text from Excel files
         """
-        df = pd.read_excel(file_path)
-        return df.to_string()
+        # Convert all data to string before joining
+        return df.to_string(index=False)
 
-    def vectorize(self, content: str):
+    # Keep the original method name, ensure it's async
+    async def vectorize(self, content: str):
         """
-        Generate vector embedding for text content
+        Generate vector embedding for text content using OpenAI.
         """
-        # Truncate content if too long to prevent memory issues
-        max_length = 10000
-        truncated_content = content[:max_length]
-        
-        return self.model.encode(truncated_content).tolist()
+        # Note: OpenAI models might have their own token limits.
+        # Consider chunking strategies for very long content if needed.
+        # The get_embedding function might need adjustments for handling limits.
+        logger.info(f"Requesting OpenAI embedding for content snippet (length {len(content)})...")
+        embedding = await get_embedding(content) # Use await for the async function
+        if embedding:
+            logger.info("Successfully received embedding from OpenAI.")
+            return embedding
+        else:
+            logger.error("Failed to get embedding from OpenAI.")
+            raise ValueError("Failed to generate embedding using OpenAI service.")
