@@ -6,14 +6,21 @@ set -e
 # -----------------------------------------------------------
 DOMAIN="ajingolik.fun"
 EMAIL="hamzameliani1@gmail.com"
+# --- IMPORTANT: SET MYSQL ROOT PASSWORD HERE ---
+MYSQL_ROOT_PASSWORD="your_secure_mysql_root_password" # !!! CHANGE THIS !!!
+# --- Application DB Credentials (MUST MATCH .env file) ---
+APP_DB_NAME="tfrtita_db"
+APP_DB_USER="tfrtita"
+APP_DB_PASSWORD="AFINasahbi@11"
 
-# Absolute paths (assuming deploy.sh is in the repository root)
-# Use explicit path for APP_DIR as pwd might be different in systemd context later
-APP_DIR="/root/tfrtita33333333333" # Explicit path
+# --- Paths ---
+# Assuming this script is run from the cloned repository root /root/tfrtita33333333333
+APP_DIR="/root/tfrtita33333333333" # Use absolute path
 BACKEND_DIR="${APP_DIR}/backend"
 FRONTEND_DIR="${APP_DIR}/frontend"
 WEB_ROOT="/var/www/${DOMAIN}/html"
 SERVICE_FILE="/etc/systemd/system/tfrtita333.service"
+VENV_DIR="${APP_DIR}/venv"
 
 # -----------------------------------------------------------
 # Logging helper
@@ -28,86 +35,70 @@ log() {
 log "Updating system packages..."
 sudo apt update && sudo apt upgrade -y
 
-log "Installing required packages (nginx, certbot, ufw, git, python3, nodejs, ffmpeg, etc.)..."
-# Also install dos2unix to fix any potential CRLF issues.
-# Removed mysql-server and expect. Added ffmpeg.
-sudo apt install -y nginx certbot python3-certbot-nginx ufw git python3 python3-pip python3-venv libyaml-dev nodejs dos2unix ffmpeg
+log "Installing required packages..."
+# Added ffmpeg, mysql-server. Removed expect.
+sudo apt install -y nginx certbot python3-certbot-nginx ufw git python3 python3-pip python3-venv libyaml-dev nodejs dos2unix ffmpeg mysql-server
 
-# Convert deploy.sh to Unix line endings (if needed)
-# Convert this script itself if run directly
-dos2unix modified_deploy.sh
+# Convert this script to Unix line endings (if needed)
+dos2unix "${APP_DIR}/modified_deploy.sh"
 
-# --- MySQL Setup Removed ---
-log "Skipping MySQL setup in script. Ensure database 'tfrtita_db' and user 'tfrtita' exist."
-# --- End MySQL Setup Removed ---
+# --- MySQL Setup ---
+log "Configuring MySQL Server..."
+# Set root password non-interactively using debconf (Requires MYSQL_ROOT_PASSWORD to be set above)
+sudo debconf-set-selections <<< "mysql-server mysql-server/root_password password ${MYSQL_ROOT_PASSWORD}"
+sudo debconf-set-selections <<< "mysql-server mysql-server/root_password_again password ${MYSQL_ROOT_PASSWORD}"
+# Re-install might be needed to apply debconf settings if MySQL was already partially installed
+sudo apt install -y mysql-server
 
+log "Creating MySQL database '${APP_DB_NAME}' and user '${APP_DB_USER}'..."
+# Use non-interactive MySQL commands with the root password variable
+sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS ${APP_DB_NAME};" || log "Failed to create database (maybe check root password?)"
+sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE USER IF NOT EXISTS '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';" || log "Failed to create user (maybe check root password?)"
+# If the user already exists, update the password instead
+sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "ALTER USER '${APP_DB_USER}'@'localhost' IDENTIFIED BY '${APP_DB_PASSWORD}';" || log "Failed to alter user (maybe check root password?)"
+sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${APP_DB_NAME}.* TO '${APP_DB_USER}'@'localhost';" || log "Failed to grant privileges (maybe check root password?)"
+sudo mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;" || log "Failed to flush privileges (maybe check root password?)"
+log "MySQL user and database setup attempted."
+# --- End MySQL Setup ---
 
 log "Configuring UFW firewall..."
 sudo ufw allow OpenSSH
-sudo ufw allow "Nginx Full"
-sudo ufw allow 8000 # Allow backend port if needed directly (though proxied)
-sudo ufw allow 3306/tcp # Allow MySQL if needed from outside localhost
+sudo ufw allow 'Nginx Full' # Use profile name
+sudo ufw allow 8000/tcp # Allow backend port just in case
+sudo ufw allow 3306/tcp # Allow MySQL port
 sudo ufw --force enable
-sudo ufw status
-
-# -----------------------------------------------------------
-# (Optional) 4.3 IPtables RULES (Keep as is from original)
-# -----------------------------------------------------------
-log "Configuring iptables rules (optional)..."
-sudo tee /etc/iptables/rules.v4 > /dev/null <<'EOF'
-*filter
-:INPUT ACCEPT [0:0]
-:FORWARD ACCEPT [0:0]
-:OUTPUT ACCEPT [0:0]
-# Allow established connections
--A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-# Allow loopback interface
--A INPUT -i lo -j ACCEPT
-# Allow SSH (port 22)
--A INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT
-# Allow HTTP (port 80)
--A INPUT -p tcp -m state --state NEW -m tcp --dport 80 -j ACCEPT
-# Allow HTTPS (port 443)
--A INPUT -p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT
-# Allow additional port (e.g., 8000)
--A INPUT -p tcp -m state --state NEW -m tcp --dport 8000 -j ACCEPT
-# Allow MySQL port (if needed externally, otherwise remove)
--A INPUT -p tcp -m state --state NEW -m tcp --dport 3306 -j ACCEPT
-# Drop all other incoming traffic
--A INPUT -j DROP
-COMMIT
-EOF
-
-sudo iptables-restore < /etc/iptables/rules.v4
+sudo ufw status verbose
 
 # -----------------------------------------------------------
 # II. APPLICATION SETUP
 # -----------------------------------------------------------
 log "Setting up the application environment in ${APP_DIR}..."
 
-# Create and activate Python virtual environment for the backend
-if [ ! -d "${APP_DIR}/venv" ]; then
+# Create and activate Python virtual environment
+if [ ! -d "${VENV_DIR}" ]; then
   log "Creating Python virtual environment..."
-  python3 -m venv "${APP_DIR}/venv" # Use absolute path
+  python3 -m venv "${VENV_DIR}"
 fi
-# Activate venv for subsequent pip commands
-source "${APP_DIR}/venv/bin/activate"
+source "${VENV_DIR}/bin/activate"
 pip install --upgrade pip setuptools wheel cython
 
 # -----------------------------------------------------------
 # II.A. BACKEND SETUP
 # -----------------------------------------------------------
 log "Installing backend dependencies..."
-# Ensure we are in the correct directory before pip install
 cd "${BACKEND_DIR}"
-# Use absolute path to the requirements file
-pip install -r "${BACKEND_DIR}/requirements.txt"
+# Ensure .env file exists before proceeding (should be transferred manually)
+if [ ! -f "${BACKEND_DIR}/.env" ]; then
+    log "ERROR: backend/.env file not found. Please create and transfer it with correct credentials."
+    exit 1
+fi
+pip install -r requirements.txt # Use relative path now that we are in BACKEND_DIR
 
 log "Initializing database (creating tables)..."
-# Ensure MySQL service is running before this step
-sudo systemctl status mysql.service # Optional: check status
+# Ensure MySQL service is running
+sudo systemctl status mysql.service || log "Warning: MySQL service might not be running."
 # Run the database script using the venv python
-"${APP_DIR}/venv/bin/python3" -m app.database || log "Database initialization failed; please check MySQL logs (/var/log/mysql/error.log) and app logs."
+"${VENV_DIR}/bin/python3" -m app.database || log "Database initialization failed; please check MySQL logs and app logs."
 # Deactivate venv after use in this section
 deactivate
 
@@ -116,7 +107,6 @@ deactivate
 # -----------------------------------------------------------
 log "Building frontend..."
 cd "${FRONTEND_DIR}"
-# Ensure npm is installed (should be via nodejs package)
 npm install
 npm run build
 
@@ -139,14 +129,14 @@ After=network.target mysql.service # Ensure MySQL is started first
 User=root
 WorkingDirectory=${BACKEND_DIR}
 # Using Gunicorn command with absolute paths and 1 worker (adjust worker count for production)
-ExecStart=${APP_DIR}/venv/bin/gunicorn -k uvicorn.workers.UvicornWorker -w 1 --bind 127.0.0.1:8080 app.main:app
+ExecStart=${VENV_DIR}/bin/gunicorn -k uvicorn.workers.UvicornWorker -w 1 --bind 127.0.0.1:8080 app.main:app
 Restart=always
 # Redirect stdout and stderr to files for debugging
 StandardOutput=file:/tmp/tfrtita333.stdout.log
 StandardError=file:/tmp/tfrtita333.stderr.log
 # Load environment variables from .env file
 EnvironmentFile=${BACKEND_DIR}/.env
-# Set PYTHONPATH explicitly if needed by imports within the app
+# Set PYTHONPATH explicitly
 Environment="PYTHONPATH=${BACKEND_DIR}"
 
 [Install]
@@ -158,7 +148,7 @@ sudo systemctl enable tfrtita333.service
 # Restart is handled in the final step
 
 # -----------------------------------------------------------
-# IV. NGINX CONFIGURATION & SSL SETUP (Keep as is from original)
+# IV. NGINX CONFIGURATION & SSL SETUP
 # -----------------------------------------------------------
 log "Configuring Nginx for ${DOMAIN}..."
 NGINX_CONF="/etc/nginx/sites-available/${DOMAIN}"
@@ -167,33 +157,37 @@ server {
     listen 80;
     server_name ${DOMAIN} www.${DOMAIN};
 
-    # ACME challenge for Certbot
-    location /.well-known/acme-challenge/ {
-        root ${WEB_ROOT};
-    }
+    # ACME challenge & Static files
+    location /.well-known/acme-challenge/ { allow all; root ${WEB_ROOT}; }
+    location / { try_files \$uri \$uri/ /index.html; root ${WEB_ROOT}; }
 
-    # Proxy API requests to backend (adjust if your API routes differ)
+    # Proxy API requests
     location /api/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        # Add timeouts if needed
-        # proxy_connect_timeout 60s;
-        # proxy_send_timeout 60s;
-        # proxy_read_timeout 60s;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
     }
-
-    # Serve static frontend files
-    location / {
-        root ${WEB_ROOT};
-        try_files \$uri \$uri/ /index.html;
+    # Add WebSocket proxying if needed for /media-stream (adjust path if necessary)
+    location /media-stream {
+        proxy_pass http://127.0.0.1:8080/media-stream; # Assuming backend handles WS on same port
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 86400; # Long timeout for persistent connection
     }
 }
 
 server {
-    listen 443 ssl http2; # Added http2
+    listen 443 ssl http2;
     server_name ${DOMAIN} www.${DOMAIN};
 
     ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
@@ -201,15 +195,14 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-    # Add security headers (optional but recommended)
-    # add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    # add_header X-Frame-Options "SAMEORIGIN" always;
-    # add_header X-Content-Type-Options "nosniff" always;
-    # add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # Security Headers (Optional but recommended)
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
-    location /.well-known/acme-challenge/ {
-        root ${WEB_ROOT};
-    }
+    location /.well-known/acme-challenge/ { allow all; root ${WEB_ROOT}; }
+    location / { try_files \$uri \$uri/ /index.html; root ${WEB_ROOT}; }
 
     location /api/ {
         proxy_pass http://127.0.0.1:8080;
@@ -217,15 +210,21 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        # Add timeouts if needed
-        # proxy_connect_timeout 60s;
-        # proxy_send_timeout 60s;
-        # proxy_read_timeout 60s;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
     }
-
-    location / {
-        root ${WEB_ROOT};
-        try_files \$uri \$uri/ /index.html;
+    # Add WebSocket proxying for SSL
+    location /media-stream {
+        proxy_pass http://127.0.0.1:8080/media-stream;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 86400;
     }
 }
 EOF
@@ -247,12 +246,13 @@ done
 
 log "Obtaining/Renewing SSL certificate via Certbot..."
 # Added --expand flag
-sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email ${EMAIL} --expand
+sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email ${EMAIL} --expand --deploy-hook "systemctl reload nginx"
 
 # -----------------------------------------------------------
 # VI. FINAL RESTART OF SERVICES
 # -----------------------------------------------------------
 log "Restarting Nginx and backend service..."
+# Nginx should have been reloaded by certbot hook, but restart just in case
 sudo systemctl restart nginx
 sudo systemctl restart tfrtita333.service
 
