@@ -7,8 +7,9 @@ set -e
 DOMAIN="ajingolik.fun"
 EMAIL="hamzameliani1@gmail.com"
 
-# Absolute paths (assumes deploy.sh is in the repository root)
-APP_DIR="$(pwd)"
+# Absolute paths (assuming deploy.sh is in the repository root)
+# Use explicit path for APP_DIR as pwd might be different in systemd context later
+APP_DIR="/root/tfrtita33333333333" # Explicit path
 BACKEND_DIR="${APP_DIR}/backend"
 FRONTEND_DIR="${APP_DIR}/frontend"
 WEB_ROOT="/var/www/${DOMAIN}/html"
@@ -27,28 +28,30 @@ log() {
 log "Updating system packages..."
 sudo apt update && sudo apt upgrade -y
 
-log "Installing required packages (nginx, certbot, ufw, git, python3, nodejs, etc.)..."
+log "Installing required packages (nginx, certbot, ufw, git, python3, nodejs, ffmpeg, etc.)..."
 # Also install dos2unix to fix any potential CRLF issues.
-# Removed mysql-server and expect from this list, will be installed manually
-sudo apt install -y nginx certbot python3-certbot-nginx ufw git python3 python3-pip python3-venv libyaml-dev nodejs dos2unix
+# Removed mysql-server and expect. Added ffmpeg.
+sudo apt install -y nginx certbot python3-certbot-nginx ufw git python3 python3-pip python3-venv libyaml-dev nodejs dos2unix ffmpeg
 
 # Convert deploy.sh to Unix line endings (if needed)
-dos2unix deploy.sh
+# Convert this script itself if run directly
+dos2unix modified_deploy.sh
 
 # --- MySQL Setup Removed ---
-# MySQL installation and user/database creation should be done manually BEFORE running this script.
+log "Skipping MySQL setup in script. Ensure database 'tfrtita_db' and user 'tfrtita' exist."
 # --- End MySQL Setup Removed ---
 
 
 log "Configuring UFW firewall..."
 sudo ufw allow OpenSSH
 sudo ufw allow "Nginx Full"
-sudo ufw allow 8000
+sudo ufw allow 8000 # Allow backend port if needed directly (though proxied)
+sudo ufw allow 3306/tcp # Allow MySQL if needed from outside localhost
 sudo ufw --force enable
 sudo ufw status
 
 # -----------------------------------------------------------
-# (Optional) 4.3 IPtables RULES
+# (Optional) 4.3 IPtables RULES (Keep as is from original)
 # -----------------------------------------------------------
 log "Configuring iptables rules (optional)..."
 sudo tee /etc/iptables/rules.v4 > /dev/null <<'EOF'
@@ -68,6 +71,8 @@ sudo tee /etc/iptables/rules.v4 > /dev/null <<'EOF'
 -A INPUT -p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT
 # Allow additional port (e.g., 8000)
 -A INPUT -p tcp -m state --state NEW -m tcp --dport 8000 -j ACCEPT
+# Allow MySQL port (if needed externally, otherwise remove)
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 3306 -j ACCEPT
 # Drop all other incoming traffic
 -A INPUT -j DROP
 COMMIT
@@ -80,37 +85,38 @@ sudo iptables-restore < /etc/iptables/rules.v4
 # -----------------------------------------------------------
 log "Setting up the application environment in ${APP_DIR}..."
 
-# (Optional) Clean previous deployment folders:
-# rm -rf "${APP_DIR}/venv"
-# sudo rm -rf "${WEB_ROOT}"
-
 # Create and activate Python virtual environment for the backend
 if [ ! -d "${APP_DIR}/venv" ]; then
   log "Creating Python virtual environment..."
-  python3 -m venv venv
+  python3 -m venv "${APP_DIR}/venv" # Use absolute path
 fi
-source venv/bin/activate
+# Activate venv for subsequent pip commands
+source "${APP_DIR}/venv/bin/activate"
 pip install --upgrade pip setuptools wheel cython
 
 # -----------------------------------------------------------
 # II.A. BACKEND SETUP
 # -----------------------------------------------------------
 log "Installing backend dependencies..."
+# Ensure we are in the correct directory before pip install
 cd "${BACKEND_DIR}"
-# Use an absolute path to the requirements file
+# Use absolute path to the requirements file
 pip install -r "${BACKEND_DIR}/requirements.txt"
 
 log "Initializing database (creating tables)..."
-# This now connects to MySQL and creates tables using the mysql.connector setup
-# Ensure MySQL service is running before this step (systemd usually handles this)
+# Ensure MySQL service is running before this step
 sudo systemctl status mysql.service # Optional: check status
-python3 -m app.database || log "Database initialization failed; please check MySQL logs (/var/log/mysql/error.log) and app logs."
+# Run the database script using the venv python
+"${APP_DIR}/venv/bin/python3" -m app.database || log "Database initialization failed; please check MySQL logs (/var/log/mysql/error.log) and app logs."
+# Deactivate venv after use in this section
+deactivate
 
 # -----------------------------------------------------------
 # II.B. FRONTEND SETUP
 # -----------------------------------------------------------
 log "Building frontend..."
 cd "${FRONTEND_DIR}"
+# Ensure npm is installed (should be via nodejs package)
 npm install
 npm run build
 
@@ -123,23 +129,24 @@ sudo cp -r dist/* "${WEB_ROOT}/"
 # III. CREATE SYSTEMD SERVICE FOR BACKEND
 # -----------------------------------------------------------
 log "Creating systemd service for backend..."
+# Use explicit paths and EnvironmentFile
 sudo tee ${SERVICE_FILE} > /dev/null <<EOF
 [Unit]
 Description=Tfrtita333 App Backend
-After=network.target
+After=network.target mysql.service # Ensure MySQL is started first
 
 [Service]
 User=root
 WorkingDirectory=${BACKEND_DIR}
-# Using Gunicorn command with absolute paths and 1 worker
-ExecStart=/root/tfrtita33333333333/venv/bin/gunicorn -k uvicorn.workers.UvicornWorker -w 1 --bind 127.0.0.1:8080 app.main:app
+# Using Gunicorn command with absolute paths and 1 worker (adjust worker count for production)
+ExecStart=${APP_DIR}/venv/bin/gunicorn -k uvicorn.workers.UvicornWorker -w 1 --bind 127.0.0.1:8080 app.main:app
 Restart=always
 # Redirect stdout and stderr to files for debugging
 StandardOutput=file:/tmp/tfrtita333.stdout.log
 StandardError=file:/tmp/tfrtita333.stderr.log
-# Reverting back to EnvironmentFile as direct Environment lines caused 'resources' error
+# Load environment variables from .env file
 EnvironmentFile=${BACKEND_DIR}/.env
-# Keep PYTHONPATH separate just in case
+# Set PYTHONPATH explicitly if needed by imports within the app
 Environment="PYTHONPATH=${BACKEND_DIR}"
 
 [Install]
@@ -148,10 +155,10 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable tfrtita333.service
-sudo systemctl restart tfrtita333.service
+# Restart is handled in the final step
 
 # -----------------------------------------------------------
-# IV. NGINX CONFIGURATION & SSL SETUP
+# IV. NGINX CONFIGURATION & SSL SETUP (Keep as is from original)
 # -----------------------------------------------------------
 log "Configuring Nginx for ${DOMAIN}..."
 NGINX_CONF="/etc/nginx/sites-available/${DOMAIN}"
@@ -172,6 +179,10 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        # Add timeouts if needed
+        # proxy_connect_timeout 60s;
+        # proxy_send_timeout 60s;
+        # proxy_read_timeout 60s;
     }
 
     # Serve static frontend files
@@ -182,13 +193,19 @@ server {
 }
 
 server {
-    listen 443 ssl;
+    listen 443 ssl http2; # Added http2
     server_name ${DOMAIN} www.${DOMAIN};
 
     ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Add security headers (optional but recommended)
+    # add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    # add_header X-Frame-Options "SAMEORIGIN" always;
+    # add_header X-Content-Type-Options "nosniff" always;
+    # add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
     location /.well-known/acme-challenge/ {
         root ${WEB_ROOT};
@@ -200,6 +217,10 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        # Add timeouts if needed
+        # proxy_connect_timeout 60s;
+        # proxy_send_timeout 60s;
+        # proxy_read_timeout 60s;
     }
 
     location / {
@@ -224,8 +245,8 @@ while pgrep -x certbot >/dev/null; do
     sleep 10
 done
 
-log "Obtaining SSL certificate via Certbot..."
-# Added --expand flag to handle existing certificates
+log "Obtaining/Renewing SSL certificate via Certbot..."
+# Added --expand flag
 sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email ${EMAIL} --expand
 
 # -----------------------------------------------------------
@@ -235,4 +256,6 @@ log "Restarting Nginx and backend service..."
 sudo systemctl restart nginx
 sudo systemctl restart tfrtita333.service
 
-log "Deployment complete. Your site is available at: https://${DOMAIN}"
+log "Deployment complete. Your site should be available at: https://${DOMAIN}"
+log "Check backend service status with: systemctl status tfrtita333.service"
+log "Check backend logs with: cat /tmp/tfrtita333.stderr.log"
