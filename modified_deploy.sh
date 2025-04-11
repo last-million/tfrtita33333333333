@@ -138,18 +138,10 @@ Restart=always
 # Redirect stdout and stderr to files for debugging
 StandardOutput=file:/tmp/tfrtita333.stdout.log
 StandardError=file:/tmp/tfrtita333.stderr.log
-# Add environment variables directly (ensure values are correct!)
+# Reverting to EnvironmentFile to load from .env
+EnvironmentFile=${BACKEND_DIR}/.env
+# Keep PYTHONPATH separate just in case
 Environment="PYTHONPATH=${BACKEND_DIR}"
-Environment="DB_HOST=127.0.0.1"
-Environment="DB_PORT=3306"
-Environment="DB_USER=tfrtita"
-Environment="DB_PASSWORD=AFINasahbi@11"
-Environment="DB_NAME=tfrtita_db"
-Environment="ULTRAVOX_API_KEY=your_ultravox_api_key" # Ensure this is replaced with actual key
-Environment="TWILIO_ACCOUNT_SID=your_account_sid" # Ensure this is replaced with actual key
-Environment="TWILIO_AUTH_TOKEN=your_auth_token" # Ensure this is replaced with actual key
-Environment="TWILIO_FROM_NUMBER=your_twilio_number" # Ensure this is replaced with actual number
-Environment="BASE_URL=https://ajingolik.fun"
 
 [Install]
 WantedBy=multi-user.target
