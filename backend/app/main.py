@@ -2,8 +2,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPExcept
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from .database import create_tables, get_db_connection, Error as DBError
-from .routes import credentials, calls
+from .routes import credentials, calls, knowledge_base
 from .config import settings
+from . import prompts # Import prompts module
 import logging
 import json
 import base64
@@ -39,6 +40,7 @@ app.add_middleware(
 # Include routes
 app.include_router(credentials.router, prefix="/api/credentials", tags=["Credentials"])
 app.include_router(calls.router, prefix="/api/calls", tags=["Calls"])
+app.include_router(knowledge_base.router, prefix="/api/kb", tags=["KnowledgeBase"]) # Added KB router
 
 @app.on_event("startup")
 def startup_event():
@@ -64,9 +66,9 @@ async def create_ultravox_call(system_prompt: str, first_message: str) -> str:
         "Content-Type": "application/json"
     }
     payload = {
-        "systemPrompt": system_prompt,
-        "model": "fixie-ai/ultravox-70B", # TODO: Make configurable
-        "voice": "Tanya-English", # TODO: Make configurable
+        "systemPrompt": system_prompt, # Use passed system_prompt
+        "model": settings.ultravox_model, # Use from settings
+        "voice": settings.ultravox_voice, # Use from settings
         "initialMessages": [{"role": "MESSAGE_ROLE_USER", "text": first_message}],
         "medium": {
             "serverWebSocket": {
@@ -194,7 +196,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         session = {"transcript": "", "callerNumber": caller_number, "callDetails": {}, "firstMessage": first_message, "streamSid": stream_sid}
                         sessions[call_sid] = session
 
-                    system_prompt = "You are a helpful AI assistant." # TODO: Use prompts.py
+                    # Use system prompt from prompts module
+                    system_prompt = prompts.SYSTEM_MESSAGE # Assuming SYSTEM_MESSAGE exists in prompts.py
                     uv_join_url = await create_ultravox_call(system_prompt, first_message)
 
                     if not uv_join_url:
