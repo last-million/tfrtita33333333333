@@ -134,10 +134,26 @@ Restart=always
 # Redirect stdout and stderr to files for debugging
 StandardOutput=file:/tmp/tfrtita333.stdout.log
 StandardError=file:/tmp/tfrtita333.stderr.log
-# Load environment variables from .env file
-EnvironmentFile=${BACKEND_DIR}/.env
-# Set PYTHONPATH explicitly
+# Trying Environment variables directly AGAIN - ensure values are EXACTLY correct
+# EnvironmentFile=${BACKEND_DIR}/.env # Commenting out EnvFile
 Environment="PYTHONPATH=${BACKEND_DIR}"
+Environment="DB_HOST=127.0.0.1"
+Environment="DB_PORT=3306"
+Environment="DB_USER=tfrtita"
+Environment="DB_PASSWORD=AFINasahbi@11"
+Environment="DB_NAME=tfrtita_db"
+Environment="ULTRAVOX_API_KEY=vHUZrWdv.JAv2gzEM5Hf0LK56AajdAxjEYLMoIIOs"
+Environment="TWILIO_ACCOUNT_SID=AC5a54e08142781af4e3762e1f12ecb24a"
+Environment="TWILIO_AUTH_TOKEN=2c7995567077fedbc9701ff69afcc6ba"
+Environment="TWILIO_FROM_NUMBER=+12762761877"
+Environment="BASE_URL=https://ajingolik.fun"
+# Add other required env vars from .env here if needed (e.g., Google, Supabase)
+Environment="SUPABASE_URL=https://ahhsydchxwvassjbwvow.supabase.co"
+Environment="SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFoaHN5ZGNoeHd2YXNzamJ3dm93Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzczMTA3ODMsImV4cCI6MjA1Mjg4Njc4M30.Zu7VADzlFTezQj2qydiAFvFcIUkLdPStfxzaXwRXxzw"
+Environment="GOOGLE_CLIENT_ID=539634127336-nrin2lgnd455l4qgp4qcqfbsl7vm7vvv.apps.googleusercontent.com"
+Environment="GOOGLE_CLIENT_SECRET=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"
+# Add AIRTABLE_API_KEY if needed by config.py (even if empty)
+Environment="AIRTABLE_API_KEY="
 
 [Install]
 WantedBy=multi-user.target
