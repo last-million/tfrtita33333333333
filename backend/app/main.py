@@ -19,13 +19,14 @@ import audioop # For mulaw conversion
 logging.basicConfig(level=logging.INFO) # Basic config for root logger
 logger = logging.getLogger(__name__)
 
-# Import Ultravox client library (Trying import from session module)
+# Import Ultravox client library (Trying import directly from package __init__)
 UltravoxClient = None # Initialize as None
 try:
-    from ultravox_client.session import Client as UltravoxClient
-    logger.info("Successfully imported Client from ultravox_client.session")
+    # This assumes Client might be defined in ultravox_client/__init__.py
+    from ultravox_client import Client as UltravoxClient
+    logger.info("Successfully imported Client from ultravox_client")
 except ImportError as e:
-    logger.error(f"Failed to import Client from ultravox_client.session: {e}. Check package installation and structure.")
+    logger.error(f"Failed to import Client directly from ultravox_client: {e}. Check package installation and structure.")
 
 
 app = FastAPI()
