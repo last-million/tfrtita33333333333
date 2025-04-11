@@ -144,7 +144,7 @@ Environment="DB_PASSWORD=AFINasahbi@11"
 Environment="DB_NAME=tfrtita_db"
 Environment="ULTRAVOX_API_KEY=vHUZrWdv.JAv2gzEM5Hf0LK56AajdAxjEYLMoIIOs"
 Environment="TWILIO_ACCOUNT_SID=AC5a54e08142781af4e3762e1f12ecb24a"
-Environment="TWILIO_AUTH_TOKEN=2c7995567077fedbc9701ff69afcc6ba"
+Environment="TWILIO_AUTH_TOKEN=79d170e946252aca0910dd3f2df4f35d" # Corrected Auth Token
 Environment="TWILIO_FROM_NUMBER=+12762761877"
 Environment="BASE_URL=https://ajingolik.fun"
 # Add other required env vars from .env here if needed (e.g., Google, Supabase)
