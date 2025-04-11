@@ -30,6 +30,8 @@ pydantic-settings
 # MySQL Connector
 mysql-connector-python
 
-# WebSocket Audio Processing (Added)
-ultravox-client
-pydub # For audio format conversion
+# WebSocket Audio Processing (Updated based on example)
+websockets # For direct WebSocket connection to Ultravox
+requests # For making HTTP call to create Ultravox session
+openai # Added for embeddings
+# Removed ultravox-client and pydub
