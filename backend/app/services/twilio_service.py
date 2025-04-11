@@ -8,16 +8,28 @@ logger = logging.getLogger(__name__)
 
 class TwilioService:
     def __init__(self):
-        self.client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
+        # Ensure credentials are valid
+        if not settings.twilio_account_sid or not settings.twilio_auth_token:
+             logger.error("Twilio credentials missing in settings.")
+             # Handle this case appropriately, maybe raise an exception
+             # For now, initialization might proceed but calls will fail
+             self.client = None
+        else:
+            self.client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
 
-    def make_call(self, to_number: str, from_number: str, url: str):
+    def make_call(self, to_number: str, from_number: str, twiml: str): # Changed url to twiml
         call_resource = None # Initialize call resource to None
+        if not self.client:
+             logger.error("Twilio client not initialized due to missing credentials.")
+             raise Exception("Twilio client not initialized.") # Or a more specific exception
+
         try:
-            logger.info(f"Attempting Twilio API call: to={to_number}, from={from_number}, url={url}")
+            logger.info(f"Attempting Twilio API call: to={to_number}, from={from_number}, twiml provided.")
+            # Use twiml parameter instead of url
             call_resource = self.client.calls.create(
                 to=to_number,
                 from_=from_number,
-                url=url,
+                twiml=twiml,
                 # Add status callback to receive updates for outbound calls too
                 status_callback=f"{settings.base_url}/api/calls/call-status", # BASE_URL must be in .env
                 status_callback_method="POST",
