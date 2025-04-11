@@ -138,20 +138,10 @@ Restart=always
 # Redirect stdout and stderr to files for debugging
 StandardOutput=file:/tmp/tfrtita333.stdout.log
 StandardError=file:/tmp/tfrtita333.stderr.log
-# Setting Environment variables directly AGAIN with verified credentials
-# EnvironmentFile=${BACKEND_DIR}/.env # Commenting out EnvFile again
+# Reverting back to EnvironmentFile as direct Environment lines caused 'resources' error
+EnvironmentFile=${BACKEND_DIR}/.env
+# Keep PYTHONPATH separate just in case
 Environment="PYTHONPATH=${BACKEND_DIR}"
-Environment="DB_HOST=127.0.0.1"
-Environment="DB_PORT=3306"
-Environment="DB_USER=tfrtita"
-Environment="DB_PASSWORD=AFINasahbi@11"
-Environment="DB_NAME=tfrtita_db"
-Environment="ULTRAVOX_API_KEY=vHUZrWdv.JAv2gzEM5Hf0LK56AajdAxjEYLMoIIOs" # Verified
-Environment="TWILIO_ACCOUNT_SID=AC5a54e08142781af4e3762e1f12ecb24a" # Verified
-Environment="TWILIO_AUTH_TOKEN=2c7995567077fedbc9701ff69afcc6ba" # Verified
-Environment="TWILIO_FROM_NUMBER=+12762761877" # Verified
-Environment="BASE_URL=https://ajingolik.fun" # Verified
-# Add any other required env vars from .env here if needed
 
 [Install]
 WantedBy=multi-user.target
