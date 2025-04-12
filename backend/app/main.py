@@ -4,7 +4,7 @@ from fastapi.responses import Response
 from .database import create_tables, get_db_connection, Error as DBError
 from .routes import credentials, calls, knowledge_base
 from .config import settings
-from . import prompts # Import prompts module
+# from . import prompts # Removed import as file is empty
 import logging
 import json
 import base64
@@ -194,10 +194,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     else:
                         logger.warning(f"Session not found for CallSid {call_sid} on start event. Creating.")
                         session = {"transcript": "", "callerNumber": caller_number, "callDetails": {}, "firstMessage": first_message, "streamSid": stream_sid}
-                        sessions[call_sid] = session
+                        sessions[call_sid] = session # Corrected indentation
 
-                    # Use system prompt from prompts module
-                    system_prompt = prompts.SYSTEM_MESSAGE # Assuming SYSTEM_MESSAGE exists in prompts.py
+                    # Define a default system prompt here
+                    system_prompt = "You are a helpful AI assistant designed to handle phone calls."
                     uv_join_url = await create_ultravox_call(system_prompt, first_message)
 
                     if not uv_join_url:
